@@ -17,13 +17,13 @@
     mode: "0644"
   when: not ansible_check_mode
 
-- name: Configure Docker's Ubuntu Noble stable APT source
+- name: Configure Docker's Ubuntu Resolute stable APT source
   ansible.builtin.copy:
     dest: /etc/apt/sources.list.d/gnuvil-docker.sources
     content: |
       Types: deb
       URIs: https://download.docker.com/linux/ubuntu
-      Suites: noble
+      Suites: resolute
       Components: stable
       Architectures: amd64
       Signed-By: /etc/apt/keyrings/gnuvil-docker.asc

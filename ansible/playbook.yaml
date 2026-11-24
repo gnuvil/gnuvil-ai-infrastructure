@@ -9,9 +9,9 @@
       ansible.builtin.assert:
         that:
           - ansible_facts.distribution == 'Ubuntu'
-          - ansible_facts.distribution_version == '24.04'
+          - ansible_facts.distribution_version == '26.04'
           - ansible_facts.architecture == 'x86_64'
-        fail_msg: This playbook requires an Ubuntu 24.04 amd64 guest.
+        fail_msg: This playbook requires an Ubuntu 26.04 amd64 guest.
       tags: always
 
   roles:

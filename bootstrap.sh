@@ -6,13 +6,13 @@ if [[ $EUID != 0 ]]; then
     exit 1
 fi
 if [[ $(uname -s) != Linux || $(uname -m) != x86_64 || ! -r /etc/os-release ]]; then
-    printf 'Bootstrap requires Ubuntu Server 24.04 on amd64.\n' >&2
+    printf 'Bootstrap requires Ubuntu Server 26.04 on amd64.\n' >&2
     exit 1
 fi
 # shellcheck disable=SC1091
 . /etc/os-release
-if [[ ${ID:-} != ubuntu || ${VERSION_ID:-} != 24.04 ]]; then
-    printf 'Bootstrap requires Ubuntu Server 24.04 on amd64.\n' >&2
+if [[ ${ID:-} != ubuntu || ${VERSION_ID:-} != 26.04 ]]; then
+    printf 'Bootstrap requires Ubuntu Server 26.04 on amd64.\n' >&2
     exit 1
 fi
 

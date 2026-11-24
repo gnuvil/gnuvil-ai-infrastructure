@@ -9,8 +9,8 @@
 
 ## 대상 하드웨어
 
-- Lenovo System x3500 M4, Proxmox VE, Xeon E5-2680 v2 × 2, Ubuntu Server 24.04 LTS amd64 게스트를 기준으로 한다.
-- CPU 기준은 Ivy Bridge와 AVX다. AVX2, AVX-512 및 x86-64-v3를 요구하는 바이너리나 Wheel을 배포하기 전에 대체 빌드를 검토한다. VM의 CPU 플래그와 전이 의존성도 확인한다.
+- Lenovo System x3500 M4, Proxmox VE, Xeon E5-2680 v2 × 2, Ubuntu Server 26.04 LTS (Resolute) 표준 amd64 게스트를 기준으로 한다.
+- CPU 기준은 Ivy Bridge와 AVX다. AVX2, AVX-512 및 x86-64-v3를 요구하는 바이너리나 Wheel을 배포하기 전에 대체 빌드를 검토한다. 설치에는 표준 amd64 Server ISO를 사용하고 `amd64v3` 패키지 변형은 활성화하지 않는다. VM의 CPU 플래그와 전이 의존성도 확인한다.
 - Tesla V100 PCIe 16GB × 1은 Volta `sm_70`이다. NVIDIA R580 독점 커널 모듈과 CUDA 12.x를 기준선으로 유지한다. 이미지, Wheel, 커스텀 CUDA 확장의 `sm_70` 지원을 각각 확인한다.
 - V100에서 네이티브 BF16·FP8을 전제하지 않는다. 모델의 VRAM 예산과 FP16·FP32 경로를 확인한다. GPU 서비스는 기본적으로 한 번에 하나를 운영한다.
 - 물리 RAM은 현재 32GB이고 64GB 증설 예정이며 AI VM 초기 목표는 32GB다. 실제 VM 할당 전 Proxmox와 ZFS에 필요한 메모리를 확보한다.

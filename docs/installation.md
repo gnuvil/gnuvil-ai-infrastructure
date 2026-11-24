@@ -4,8 +4,8 @@
 
 ## 사전 조건
 
-- Proxmox에 Ubuntu Server 24.04 amd64 VM, V100 PCIe 패스스루 및 QEMU Guest Agent 채널이 준비되어 있어야 한다. VM에서 `lspci -nn`으로 GPU를 확인한다.
-- Ubuntu APT 소스에 Noble `restricted`와 `universe`, 보안 및 업데이트 포켓이 있어야 한다. 실행 중인 커널의 헤더 패키지 후보가 필요하다. Secure Boot가 켜져 있으면 DKMS 모듈 서명과 MOK 등록 절차를 준비한다. [Ubuntu NVIDIA 드라이버 안내](https://documentation.ubuntu.com/server/how-to/graphics/install-nvidia-drivers/)
+- Proxmox에 Ubuntu Server 26.04 LTS 표준 `amd64` ISO로 설치한 VM, V100 PCIe 패스스루 및 QEMU Guest Agent 채널이 준비되어 있어야 한다. Ivy Bridge CPU는 AVX2가 없으므로 `amd64v3` 패키지나 해당 변형의 클라우드 이미지는 사용하지 않는다. VM에서 `lspci -nn`으로 GPU를 확인한다. [Ubuntu Server ISO](https://releases.ubuntu.com/26.04/) · [Ubuntu CPU 아키텍처](https://ubuntu.com/architecture)
+- Ubuntu APT 소스에 Resolute `restricted`와 `universe`, 보안 및 업데이트 포켓이 있어야 한다. 실행 중인 커널의 헤더 패키지 후보가 필요하다. Secure Boot가 켜져 있으면 DKMS 모듈 서명과 MOK 등록 절차를 준비한다. [Ubuntu NVIDIA 드라이버 안내](https://documentation.ubuntu.com/server/how-to/graphics/install-nvidia-drivers/)
 - Proxmox와 ZFS를 위한 물리 RAM을 남긴 다음 VM 메모리를 지정한다. 데이터용 디스크는 이미 준비된 파일시스템을 연결하거나 외부에서 마운트한다.
 - VM에 Git, sudo, Bash, GNU Make가 필요하다. 공식 Ubuntu, Docker 및 NVIDIA APT, PyPI, Ansible Galaxy, Docker Hub 접근이 필요하다.
 
@@ -50,16 +50,19 @@ sudo make configure
 2. OS와 하드웨어를 확인한다.
 
    ```sh
+   cat /etc/os-release
+   uname -r
    lscpu
    lspci -nn -d 10de:
    nvidia-smi --query-gpu=name,compute_cap,driver_version,memory.total --format=csv
+   dkms status
    modinfo -F license nvidia
    systemctl is-active qemu-guest-agent docker
    sudo docker info --format '{{json .Runtimes}}'
    sudo docker compose version
    ```
 
-   AVX가 노출되고 GPU 목록에 Tesla V100 한 개와 Compute Capability 7.0이 표시되어야 한다. 드라이버는 580.x, 로드된 커널 모듈은 독점 모듈, Docker 런타임 목록에는 `nvidia`가 있어야 한다.
+   VM이 Ubuntu 26.04이고 AVX가 노출되는지 확인한다. 현재 커널용 DKMS 모듈이 설치되고 GPU 목록에 Tesla V100 한 개와 Compute Capability 7.0이 표시되어야 한다. 드라이버는 580.x, 로드된 커널 모듈은 독점 모듈, Docker 런타임 목록에는 `nvidia`가 있어야 한다.
 
 3. 영구 데이터 파일시스템과 각 경로의 소유권을 확인한다.
 

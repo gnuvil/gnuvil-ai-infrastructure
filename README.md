@@ -1,6 +1,6 @@
 # Gnuvil AI Infrastructure
 
-Lenovo System x3500 M4의 Proxmox VE에서 실행하는 Gnuvil AI VM의 구성을 관리한다. 초기 구성은 Ubuntu Server 24.04 LTS, Tesla V100 PCIe 패스스루, Docker, 영구 데이터 디렉터리, 실제 CUDA 연산을 확인하는 `gpu-smoke`를 제공한다.
+Lenovo System x3500 M4의 Proxmox VE에서 실행하는 Gnuvil AI VM의 구성을 관리한다. 초기 구성은 Ubuntu Server 26.04 LTS 표준 amd64, Tesla V100 PCIe 패스스루, Docker, 영구 데이터 디렉터리, 실제 CUDA 연산을 확인하는 `gpu-smoke`를 제공한다.
 
 ## 구성
 
