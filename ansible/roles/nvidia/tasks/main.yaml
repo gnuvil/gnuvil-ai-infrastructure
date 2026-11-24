@@ -1,0 +1,78 @@
+---
+- name: Check for a passed-through NVIDIA PCI device
+  ansible.builtin.command:
+    argv: [lspci, -Dn, -d, "10de:"]
+  register: nvidia_pci
+  changed_when: false
+  failed_when: nvidia_pci.rc != 0 or nvidia_pci.stdout | trim | length == 0
+  when: not ansible_check_mode
+
+- name: Install the proprietary Ubuntu server driver and matching kernel headers
+  vars:
+    nvidia_version_suffix: "{{ '=' ~ nvidia_driver_apt_version if nvidia_driver_apt_version else '' }}"
+  ansible.builtin.apt:
+    name:
+      - "linux-headers-{{ ansible_facts.kernel }}"
+      - "nvidia-driver-{{ nvidia_driver_branch }}-server{{ nvidia_version_suffix }}"
+      - "nvidia-dkms-{{ nvidia_driver_branch }}-server{{ nvidia_version_suffix }}"
+    state: present
+    install_recommends: false
+    fail_on_autoremove: true
+    auto_install_module_deps: false
+  register: nvidia_driver_install
+
+- name: Record the boot boundary for a changed driver or kernel headers
+  ansible.builtin.copy:
+    dest: /run/gnuvil-nvidia-reboot-required
+    content: "Restart the AI VM before loading the configured driver.\n"
+    owner: root
+    group: root
+    mode: "0644"
+  when:
+    - not ansible_check_mode
+    - nvidia_driver_install.changed
+
+- name: Check for pending host or driver reboot
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /run/gnuvil-nvidia-reboot-required
+    - /run/reboot-required
+  register: nvidia_reboot_markers
+
+- name: Pause configuration until the operator reboots the AI VM
+  ansible.builtin.fail:
+    msg: "AI VM 재부팅이 필요합니다. 작업 상태를 확인한 후 VM에서 sudo reboot를 실행하고 sudo make configure를 다시 실행하세요."
+  when:
+    - not ansible_check_mode
+    - nvidia_reboot_markers.results | selectattr('stat.exists') | list | length > 0
+
+- name: Verify the loaded NVIDIA driver and GPU identity
+  when: not ansible_check_mode
+  block:
+    - name: Read the loaded kernel module description
+      ansible.builtin.slurp:
+        src: /proc/driver/nvidia/version
+      register: nvidia_loaded_module
+
+    - name: Query the attached GPU and driver version
+      ansible.builtin.command:
+        argv:
+          - nvidia-smi
+          - --query-gpu=name,compute_cap,driver_version
+          - --format=csv,noheader,nounits
+      register: nvidia_gpu
+      changed_when: false
+
+    - name: Require one Volta GPU and the configured proprietary driver branch
+      vars:
+        nvidia_gpu_fields: "{{ nvidia_gpu.stdout.split(',') | map('trim') | list }}"
+      ansible.builtin.assert:
+        that:
+          - "'NVIDIA UNIX' in (nvidia_loaded_module.content | b64decode)"
+          - nvidia_gpu.stdout_lines | length == 1
+          - nvidia_gpu_fields | length == 3
+          - nvidia_gpu_fields[0] is search(nvidia_gpu_name_pattern)
+          - nvidia_gpu_fields[1] == nvidia_gpu_compute_capability
+          - nvidia_gpu_fields[2].startswith(nvidia_driver_branch ~ '.')
+        fail_msg: "Unexpected NVIDIA module or GPU. nvidia-smi returned {{ nvidia_gpu.stdout | trim }}."

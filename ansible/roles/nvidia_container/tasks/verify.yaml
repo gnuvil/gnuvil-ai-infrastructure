@@ -1,0 +1,10 @@
+---
+- name: Verify GPU access from the explicitly prebuilt CUDA test container
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - "{{ ai_project_root }}/scripts/gpu-switch.py"
+      - switch
+      - "{{ nvidia_container_smoke_service }}"
+  changed_when: true
+  when: not ansible_check_mode

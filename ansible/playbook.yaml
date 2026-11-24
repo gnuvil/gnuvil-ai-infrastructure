@@ -1,0 +1,34 @@
+---
+- name: Configure the Gnuvil AI VM
+  hosts: all
+  become: true
+  force_handlers: true
+
+  pre_tasks:
+    - name: Verify the supported guest OS and architecture
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == 'Ubuntu'
+          - ansible_facts.distribution_version == '24.04'
+          - ansible_facts.architecture == 'x86_64'
+        fail_msg: This playbook requires an Ubuntu 24.04 amd64 guest.
+      tags: always
+
+  roles:
+    - role: base
+      tags: base
+    - role: storage
+      tags: storage
+    - role: nvidia
+      tags: nvidia
+    - role: docker
+      tags: docker
+    - role: nvidia_container
+      tags: nvidia_container
+
+  post_tasks:
+    - name: Run the optional end-to-end GPU probe
+      ansible.builtin.import_role:
+        name: nvidia_container
+        tasks_from: verify
+      tags: [never, gpu_verify]

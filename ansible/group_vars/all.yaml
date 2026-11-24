@@ -1,0 +1,37 @@
+---
+ai_timezone: Asia/Seoul
+ai_project_root: /opt/gnuvil-ai
+ai_data_root: /srv/ai-data
+ai_data_owner: root
+ai_data_group: root
+ai_data_mount_uuid: ""
+ai_data_mount_fstype: ext4
+ai_data_mount_options: defaults
+ai_data_require_mount: false
+ai_data_directories:
+  - models
+  - datasets
+  - outputs
+  - cache
+  - state
+  - logs
+
+# Track Ubuntu's security patches within the proprietary server branch.
+nvidia_driver_branch: "580"
+nvidia_driver_apt_version: ""
+nvidia_gpu_name_pattern: Tesla V100
+nvidia_gpu_compute_capability: "7.0"
+
+docker_engine_version: "5:29.10.0-1~ubuntu.24.04~noble"
+docker_containerd_version: "2.4.2-4~ubuntu.24.04~noble"
+docker_buildx_version: "0.39.0-1~ubuntu.24.04~noble"
+docker_compose_version: "5.7.2-1~ubuntu.24.04~noble"
+docker_daemon_options:
+  log-driver: local
+  log-opts:
+    max-size: "20m"
+    max-file: "5"
+
+nvidia_container_toolkit_version: "1.20.2-1"
+# Run via --tags gpu_verify only after the local test image has been built.
+nvidia_container_smoke_service: gpu-smoke

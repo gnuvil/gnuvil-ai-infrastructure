@@ -1,0 +1,94 @@
+---
+- name: Create the APT keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Retrieve the Docker APT signing key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    checksum: "sha256:1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570"
+    dest: /etc/apt/keyrings/gnuvil-docker.asc
+    owner: root
+    group: root
+    mode: "0644"
+  when: not ansible_check_mode
+
+- name: Configure Docker's Ubuntu Noble stable APT source
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/gnuvil-docker.sources
+    content: |
+      Types: deb
+      URIs: https://download.docker.com/linux/ubuntu
+      Suites: noble
+      Components: stable
+      Architectures: amd64
+      Signed-By: /etc/apt/keyrings/gnuvil-docker.asc
+    owner: root
+    group: root
+    mode: "0644"
+  register: docker_apt_source
+
+- name: Refresh the index after configuring the Docker repository
+  ansible.builtin.apt:
+    update_cache: true
+    auto_install_module_deps: false
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Install the pinned Docker Engine, CLI and plugins
+  ansible.builtin.apt:
+    name:
+      - "docker-ce={{ docker_engine_version }}"
+      - "docker-ce-cli={{ docker_engine_version }}"
+      - "containerd.io={{ docker_containerd_version }}"
+      - "docker-buildx-plugin={{ docker_buildx_version }}"
+      - "docker-compose-plugin={{ docker_compose_version }}"
+    state: present
+    install_recommends: false
+    fail_on_autoremove: true
+    auto_install_module_deps: false
+  when: not ansible_check_mode or not docker_apt_source.changed
+
+- name: Inspect the existing Docker daemon config
+  ansible.builtin.stat:
+    path: /etc/docker/daemon.json
+  register: docker_daemon_file
+
+- name: Read the existing Docker daemon config
+  ansible.builtin.slurp:
+    src: /etc/docker/daemon.json
+  register: docker_daemon_existing
+  when: docker_daemon_file.stat.exists
+
+- name: Create the Docker daemon configuration directory
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  register: docker_config_dir
+
+- name: Install managed Docker options while preserving runtime registrations
+  vars:
+    docker_current_options: "{{ (docker_daemon_existing.content | b64decode | from_json) if docker_daemon_file.stat.exists else {} }}"
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    content: "{{ docker_current_options | combine(docker_daemon_options) | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+    validate: dockerd --validate --config-file %s
+  notify: Restart Docker
+  when: not ansible_check_mode or not docker_config_dir.changed
+
+- name: Enable and start Docker Engine
+  ansible.builtin.systemd_service:
+    name: docker.service
+    enabled: true
+    state: started
+  when: not ansible_check_mode

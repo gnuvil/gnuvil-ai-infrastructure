@@ -1,0 +1,48 @@
+---
+- name: Refresh the Ubuntu package index
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    auto_install_module_deps: false
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Install basic VM tools
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - kmod
+      - make
+      - pciutils
+      - python3-yaml
+      - qemu-guest-agent
+      - tzdata
+    state: present
+    install_recommends: false
+    fail_on_autoremove: true
+    auto_install_module_deps: false
+
+- name: Set the guest time zone
+  ansible.builtin.file:
+    src: "/usr/share/zoneinfo/{{ ai_timezone }}"
+    dest: /etc/localtime
+    state: link
+    owner: root
+    group: root
+    force: true
+    follow: false
+
+- name: Record the guest time zone for Debian tools
+  ansible.builtin.copy:
+    dest: /etc/timezone
+    content: "{{ ai_timezone }}\n"
+    owner: root
+    group: root
+    mode: "0644"
+
+# Ubuntu starts this static service at boot through the guest-agent udev rule.
+- name: Ensure the QEMU Guest Agent is running
+  ansible.builtin.systemd_service:
+    name: qemu-guest-agent.service
+    state: started
+  when: not ansible_check_mode

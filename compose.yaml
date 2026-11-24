@@ -1,0 +1,4 @@
+---
+name: gnuvil-ai
+include:
+  - ./services/gpu-smoke/compose.yaml

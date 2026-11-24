@@ -1,0 +1,7 @@
+---
+services:
+  gpu-smoke: job
+stop_timeout_seconds: 30
+idle_timeout_seconds: 30
+job_timeout_seconds: 60
+idle_memory_mib: 64

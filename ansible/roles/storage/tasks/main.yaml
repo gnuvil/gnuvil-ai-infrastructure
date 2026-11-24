@@ -1,0 +1,109 @@
+---
+- name: Validate storage parameters
+  ansible.builtin.assert:
+    that:
+      - ai_data_root is match('^/[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$')
+      - ai_data_root != ai_project_root
+      - not ai_data_root.startswith(ai_project_root ~ '/')
+      - not ai_project_root.startswith(ai_data_root ~ '/')
+      - not ai_data_mount_uuid or ai_data_mount_uuid is match('^[a-fA-F0-9-]+$')
+    fail_msg: Configure a dedicated data path and, when applicable, the filesystem UUID.
+
+- name: Inspect the data path
+  ansible.builtin.stat:
+    path: "{{ ai_data_root }}"
+    follow: false
+  register: storage_root
+
+- name: Require a real directory at the data path
+  ansible.builtin.assert:
+    that: not storage_root.stat.exists or storage_root.stat.isdir
+    fail_msg: "Resolve the non-directory entry at {{ ai_data_root }} before configuring storage."
+
+- name: Read the filesystem mounted at the data root
+  ansible.builtin.command:
+    argv: [findmnt, --mountpoint, "{{ ai_data_root }}", --noheadings, --output, "UUID,FSTYPE"]
+  register: storage_current_mount
+  changed_when: false
+  failed_when: storage_current_mount.rc not in [0, 1]
+  check_mode: false
+
+- name: Require the expected mounted filesystem when a UUID is configured
+  ansible.builtin.assert:
+    that: storage_current_mount.stdout.split() == [ai_data_mount_uuid, ai_data_mount_fstype]
+    fail_msg: "A different filesystem is mounted at {{ ai_data_root }}. Inspect and unmount it manually."
+  when:
+    - ai_data_mount_uuid | length > 0
+    - storage_current_mount.rc == 0
+
+- name: Check a separately managed mount
+  ansible.builtin.assert:
+    that: storage_current_mount.rc == 0
+    fail_msg: "Mount the data filesystem at {{ ai_data_root }} before configuring storage."
+  when:
+    - ai_data_require_mount | bool
+    - not ai_data_mount_uuid
+
+- name: Prepare and mount a configured existing filesystem
+  when: ai_data_mount_uuid | length > 0
+  block:
+    - name: Check the existing block device by filesystem UUID
+      ansible.builtin.stat:
+        path: "/dev/disk/by-uuid/{{ ai_data_mount_uuid }}"
+        follow: true
+      register: storage_device
+
+    - name: Require the configured UUID to resolve to a block device
+      ansible.builtin.assert:
+        that: storage_device.stat.isblk | default(false)
+        fail_msg: "Attach the existing data disk with filesystem UUID {{ ai_data_mount_uuid }}."
+
+    - name: Look for data that would be hidden by a new mount
+      ansible.builtin.find:
+        paths: ["{{ ai_data_root }}"]
+        file_type: any
+        hidden: true
+        recurse: false
+      register: storage_underlying_data
+      when:
+        - storage_root.stat.exists
+        - storage_current_mount.rc != 0
+
+    - name: Refuse to mount over existing files
+      ansible.builtin.assert:
+        that:
+          - storage_underlying_data.matched == 0
+          - storage_underlying_data.skipped_paths | length == 0
+        fail_msg: "Move or back up the existing files under {{ ai_data_root }} before mounting a new filesystem."
+      when: storage_underlying_data is not skipped
+
+    - name: Persist and mount the existing filesystem by UUID
+      ansible.posix.mount:
+        path: "{{ ai_data_root }}"
+        src: "UUID={{ ai_data_mount_uuid }}"
+        fstype: "{{ ai_data_mount_fstype }}"
+        opts: "{{ ai_data_mount_options }}"
+        dump: "0"
+        passno: "0"
+        state: mounted
+
+- name: Set permissions on the persistent data root
+  ansible.builtin.file:
+    path: "{{ ai_data_root }}"
+    state: directory
+    owner: "{{ ai_data_owner }}"
+    group: "{{ ai_data_group }}"
+    mode: "0750"
+    follow: false
+  when: not ansible_check_mode or not ai_data_mount_uuid or storage_current_mount.rc == 0
+
+- name: Create persistent data directories with inherited group ownership
+  ansible.builtin.file:
+    path: "{{ ai_data_root }}/{{ item }}"
+    state: directory
+    owner: "{{ ai_data_owner }}"
+    group: "{{ ai_data_group }}"
+    mode: "2770"
+    follow: false
+  loop: "{{ ai_data_directories }}"
+  when: not ansible_check_mode or not ai_data_mount_uuid or storage_current_mount.rc == 0

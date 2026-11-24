@@ -1,0 +1,96 @@
+---
+- name: Create the APT keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Retrieve the NVIDIA Container Toolkit APT signing key
+  ansible.builtin.get_url:
+    url: https://nvidia.github.io/libnvidia-container/gpgkey
+    checksum: "sha256:c880576d6cf75a48e5027a871bac70fd0421ab07d2b55f30877b21f1c87959c9"
+    dest: /etc/apt/keyrings/gnuvil-nvidia-container-toolkit.asc
+    owner: root
+    group: root
+    mode: "0644"
+  when: not ansible_check_mode
+
+- name: Configure NVIDIA's stable Container Toolkit APT source
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/gnuvil-nvidia-container-toolkit.sources
+    content: |
+      Types: deb
+      URIs: https://nvidia.github.io/libnvidia-container/stable/deb/amd64
+      Suites: /
+      Architectures: amd64
+      Signed-By: /etc/apt/keyrings/gnuvil-nvidia-container-toolkit.asc
+    owner: root
+    group: root
+    mode: "0644"
+  register: nvidia_toolkit_apt_source
+
+- name: Refresh the index after configuring the NVIDIA Toolkit repository
+  ansible.builtin.apt:
+    update_cache: true
+    auto_install_module_deps: false
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Install the pinned NVIDIA Container Toolkit and libraries
+  ansible.builtin.apt:
+    name:
+      - "nvidia-container-toolkit={{ nvidia_container_toolkit_version }}"
+      - "nvidia-container-toolkit-base={{ nvidia_container_toolkit_version }}"
+      - "libnvidia-container-tools={{ nvidia_container_toolkit_version }}"
+      - "libnvidia-container1={{ nvidia_container_toolkit_version }}"
+    state: present
+    install_recommends: false
+    fail_on_autoremove: true
+    auto_install_module_deps: false
+  when: not ansible_check_mode or not nvidia_toolkit_apt_source.changed
+
+- name: Register and verify the NVIDIA Docker runtime
+  when: not ansible_check_mode
+  block:
+    - name: Calculate the daemon configuration with the NVIDIA runtime registered
+      ansible.builtin.command:
+        argv:
+          - nvidia-ctk
+          - runtime
+          - configure
+          - --runtime=docker
+          - --config=/etc/docker/daemon.json
+          - --dry-run
+      register: nvidia_runtime_config
+      changed_when: false
+
+    - name: Install the validated NVIDIA runtime registration
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        content: "{{ nvidia_runtime_config.stdout | from_json | to_nice_json }}\n"
+        owner: root
+        group: root
+        mode: "0644"
+        validate: dockerd --validate --config-file %s
+      notify: Restart Docker
+
+    - name: Apply pending Docker configuration changes
+      ansible.builtin.meta: flush_handlers
+
+    - name: Read the available runtimes on the local Docker daemon
+      ansible.builtin.command:
+        argv:
+          - docker
+          - --host=unix:///var/run/docker.sock
+          - info
+          - --format
+          - "{{ '{{json .Runtimes}}' }}"
+      register: nvidia_docker_info
+      changed_when: false
+
+    - name: Require the NVIDIA runtime to be available
+      ansible.builtin.assert:
+        that: "'nvidia' in (nvidia_docker_info.stdout | from_json)"
+        fail_msg: Docker did not load the NVIDIA runtime. Inspect daemon.json and the Docker journal.

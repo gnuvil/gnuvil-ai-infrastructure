@@ -1,0 +1,16 @@
+---
+services:
+  gpu-smoke:
+    platform: linux/amd64
+    image: gnuvil-ai/gpu-smoke:cuda12.9.1-sm70
+    build:
+      context: .
+    profiles: [gpu-smoke]
+    gpus: all
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    pull_policy: never
+    restart: "no"
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
