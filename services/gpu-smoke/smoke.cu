@@ -10,9 +10,9 @@ static void check(cudaError_t status, const char* operation)
     }
 }
 
-__global__ void add(int* result)
+__global__ void add(int left, int right, int* result)
 {
-    *result = 19 + 23;
+    *result = left + right;
 }
 
 int main()
@@ -35,7 +35,7 @@ int main()
     int* device_result = nullptr;
     int host_result = 0;
     check(cudaMalloc(&device_result, sizeof(host_result)), "cudaMalloc");
-    add<<<1, 1>>>(device_result);
+    add<<<1, 1>>>(19, 23, device_result);
     check(cudaGetLastError(), "kernel launch");
     check(cudaDeviceSynchronize(), "kernel execution");
     check(cudaMemcpy(&host_result, device_result, sizeof(host_result),
