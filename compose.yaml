@@ -4,3 +4,4 @@ include:
   - ./services/gpu-smoke/compose.yaml
   - ./services/portal/compose.yaml
   - ./services/comfyui/compose.yaml
+  - ./services/llamacpp/compose.yaml

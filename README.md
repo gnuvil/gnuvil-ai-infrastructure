@@ -37,7 +37,7 @@ VM의 사전 조건, 스토리지 선택과 재부팅 절차는 [설치 및 검�
 
 ## Gnuvil AI Lab
 
-동아리 로고를 사용하는 한국어 대시보드에서 서비스·GPU·CPU·RAM 상태를 확인하고 등록 서비스를 제어한다. 자체 계정 DB는 없으며 인증된 Reverse Proxy가 접근을 제한한다. 초기 토큰은 비어 있어 인증 경로를 설정하기 전에는 화면·제어 요청이 거부된다. Docker 소켓은 웹 컨테이너에 연결하지 않는다. 현재 등록 서비스는 GPU 진단용 `gpu-smoke`와 기존 VM에서 사용하던 ComfyUI다. ComfyUI에는 안전한 drain adapter가 없어 웹 종료·전환을 제한하고 기존 CLI 운영을 유지한다.
+동아리 로고를 사용하는 한국어 대시보드에서 서비스·GPU·CPU·RAM 상태를 확인하고 등록 서비스를 제어한다. 자체 계정 DB는 없으며 인증된 Reverse Proxy가 접근을 제한한다. 초기 토큰은 비어 있어 인증 경로를 설정하기 전에는 화면·제어 요청이 거부된다. Docker 소켓은 웹 컨테이너에 연결하지 않는다. 현재 등록 서비스는 GPU 진단용 `gpu-smoke`, ComfyUI와 llama.cpp다. ComfyUI에는 안전한 drain adapter가 없어 웹 종료·전환을 제한하고 기존 CLI 운영을 유지한다.
 
 개발 머신의 일반 사용자 권한으로 다음을 실행한다. Docker 데몬이나 GPU는 필요 없다.
 
@@ -58,5 +58,6 @@ AI VM 운영 명령은 `sudo make portal-build`, `portal-up`, `portal-down`, `po
 - [하드웨어 호환성 및 버전 근거](docs/compatibility.md)
 - [재구축 및 백업 복구](docs/recovery.md)
 - [ComfyUI와 NoobAI XL V-Pred 설치 및 사용](services/comfyui/README.md)
+- [llama.cpp 설치 및 사용](services/llamacpp/README.md)
 
-ComfyUI와 NoobAI 모델 매니페스트는 기존 VM의 운영 구성을 보존해 포함했다. 새 VM에서는 구성과 재부팅, CUDA 테스트 및 서비스별 검증을 수행하고 기준 버전을 기록한다. llama.cpp, RVC, 음원 분리, Whisper, CPU 기반 Open WebUI는 향후 개별 서비스로 추가할 수 있다.
+ComfyUI와 NoobAI 모델 매니페스트는 기존 VM의 운영 구성을 보존해 포함했다. 새 VM에서는 구성과 재부팅, CUDA 테스트 및 서비스별 검증을 수행하고 기준 버전을 기록한다. RVC, 음원 분리, Whisper, CPU 기반 Open WebUI는 향후 개별 서비스로 추가할 수 있다.

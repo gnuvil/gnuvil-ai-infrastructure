@@ -31,3 +31,7 @@ Python `3.12-slim-bookworm`과 uv `0.10.9`의 공개 manifest 다이제스트를
 포털에는 GPU 및 CUDA 의존성이 없다. Ivy Bridge에서 Python 이미지와 Pydantic 등의 전이 Wheel이 실제로 실행되는지, Ubuntu 26.04에서 systemd 소켓 권한과 Compose bind mount가 동작하는지는 운영자 검증이 필요하다. 실제 VM·GPU 검증 완료로 간주하지 않는다. [uv Docker 가이드](https://docs.astral.sh/uv/guides/integration/docker/) · [FastAPI 템플릿](https://fastapi.tiangolo.com/advanced/templates/) · [HTMX 문서](https://htmx.org/docs/)
 
 2026-11-26 실제 VM 배포에서는 동일 다이제스트의 Python 3.12.16 이미지와 잠금 의존성을 Ivy Bridge 게스트에서 빌드·실행했고 포털·인증 Proxy 상태 확인을 통과했다. nginx stable-alpine 다이제스트는 `8eb04fe3b385090e9aa02961f77398ad09b6bf33ab07f6669a5bb7acce22c0d3`로 고정했다. GPU 전환·추론·VM 재부팅은 이번 포털 배포 검증에서 실행하지 않았다. [배포 기록](portal-deployment.md)
+
+## llama.cpp 기준선 (2026-11-26)
+
+llama.cpp 소스 `d12cc3d1ca6bba741cd77887ac9c9ee18c8415c7`과 CUDA 12.9.1 devel 이미지 다이제스트를 빌드 입력으로 고정했다. 빌드 설정은 AVX2·AVX-512·FMA·BMI2를 끄고 AVX와 F16C, CUDA `sm_70`을 선택한다. 이미지 내 APT 패키지와 CUDA 라이브러리의 실제 CPU 요구사항, 생성된 바이너리의 ISA, CUDA 코드와 모델의 GPU 오프로딩은 대상 VM에서 별도 검증해야 한다. 이미지 빌드, 모델 로딩, 추론 및 메모리 사용량은 아직 검증하지 않았다. [llama.cpp 빌드 설정](https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md) · [ggml CPU 옵션](https://github.com/ggml-org/llama.cpp/blob/master/ggml/CMakeLists.txt)
