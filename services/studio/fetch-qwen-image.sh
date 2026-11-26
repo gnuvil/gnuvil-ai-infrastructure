@@ -21,7 +21,13 @@ fetch() {
     fi
     part="$staging/$name.part"
     echo "Downloading $folder/$name"
-    curl -fL --retry 5 --retry-delay 10 -C - -o "$part" "$url"
+    if command -v aria2c >/dev/null 2>&1; then
+        # 16 parallel connections; resumes a .part left by either downloader
+        aria2c -x 16 -s 16 -k 64M -c --file-allocation=none --console-log-level=warn --summary-interval=30 \
+            -d "$staging" -o "$name.part" "$url"
+    else
+        curl -fL --retry 5 --retry-delay 10 -C - -o "$part" "$url"
+    fi
     printf '%s  %s\n' "$sum" "$part" | sha256sum -c -
     install -m 0644 -o root -g root "$part" "$target"
     rm -f "$part"

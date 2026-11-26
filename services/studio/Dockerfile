@@ -18,7 +18,9 @@ RUN uv sync --locked --no-dev --no-install-project
 COPY app/backend/app ./backend/app
 COPY app/workflows ./workflows
 COPY --from=frontend /src/dist ./frontend/dist
-RUN chmod -R a+rX /app
+# Only the copied app files: the uv venv is already world-readable, and chmod -R over it rewrote
+# tens of thousands of files into a new layer (the slowest build step).
+RUN chmod -R a+rX /app/backend /app/workflows /app/frontend
 USER 1000:1000
 WORKDIR /app/backend
 EXPOSE 8000
