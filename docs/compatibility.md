@@ -35,3 +35,5 @@ Python `3.12-slim-bookworm`과 uv `0.10.9`의 공개 manifest 다이제스트를
 ## llama.cpp 기준선 (2026-11-26)
 
 llama.cpp 소스 `d12cc3d1ca6bba741cd77887ac9c9ee18c8415c7`과 CUDA 12.9.1 devel 이미지 다이제스트를 빌드 입력으로 고정했다. 빌드 설정은 AVX2·AVX-512·FMA·BMI2를 끄고 AVX와 F16C, CUDA `sm_70`을 선택한다. 이미지 내 APT 패키지와 CUDA 라이브러리의 실제 CPU 요구사항, 생성된 바이너리의 ISA, CUDA 코드와 모델의 GPU 오프로딩은 대상 VM에서 별도 검증해야 한다. 이미지 빌드, 모델 로딩, 추론 및 메모리 사용량은 아직 검증하지 않았다. [llama.cpp 빌드 설정](https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md) · [ggml CPU 옵션](https://github.com/ggml-org/llama.cpp/blob/master/ggml/CMakeLists.txt)
+
+llama.cpp 라우터는 같은 고정 커밋에 저장소의 `router-safety.py`를 적용해 모델 자동 축출과 종료 시간 초과 시 강제 종료를 제거한다. 모델 수는 1개로 제한하며 새 모델 로드 전 운영자가 기존 작업과 언로드를 확인한다. 이 패치 및 라우터 동작은 실제 VM에서 아직 검증하지 않았다.
