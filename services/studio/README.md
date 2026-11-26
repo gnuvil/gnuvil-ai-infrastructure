@@ -2,7 +2,7 @@
 
 채팅형 이미지·영상 생성 UI(React)와 FastAPI 백엔드를 한 컨테이너로 묶은 CPU 전용 서비스다. 생성은 같은 Compose 프로젝트의 `comfyui` 서비스(GPU)에 HTTP/WebSocket으로 맡긴다. GPU·Docker 소켓은 연결하지 않는다.
 
-- 소스: `app/`은 Local Image AI Studio 커밋 `2a34e96`의 스냅숏이다(LLM 에이전트·스토리보드·자동 마스크 제외). 이미지 태그도 이 커밋으로 고정한다.
+- 소스: `app/`은 Local Image AI Studio 커밋 `96301e2`의 스냅숏이다(LLM 에이전트·스토리보드·자동 마스크 제외). 이미지 태그도 이 커밋으로 고정한다.
 - 접속: http://192.168.50.14:8190 (동아리방 LAN, **ComfyUI와 같이 로그인 없음**). GPU 정책에서 `comfyui` 그룹의 동반 서비스(`companions: [studio]`)라 ComfyUI와 **항상 같이 켜지고 꺼진다**. 포털의 ComfyUI 카드와 Image AI Studio 카드는 따로 보이지만 둘 다 같은 그룹을 제어한다(`scripts/service_config.py`가 같은 GPU 그룹을 여러 카드가 공유하는 것만 허용).
 - ComfyUI가 꺼져 있으면 생성 요청은 "포털에서 ComfyUI를 켠 뒤 다시 시도" 오류로 끝난다. 백엔드는 ComfyUI를 직접 켜거나 GPU를 중재하지 않는다(서버의 GPU 컨트롤러와 `gnuvil_lifecycle` 계약을 그대로 따른다). 백엔드 큐에 작업이 남아 있는 동안 포털에서 ComfyUI를 종료하면 남은 작업은 실패로 기록된다.
 

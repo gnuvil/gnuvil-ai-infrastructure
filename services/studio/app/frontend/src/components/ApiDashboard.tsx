@@ -11,6 +11,12 @@ type RequestEvent = {
     status: string
     image_path: string | null
     media_type: string
+    created_at?: string
+    started_at?: string | null
+    finished_at?: string | null
+    wait_seconds?: number | null
+    run_seconds?: number | null
+    total_seconds?: number | null
   } | null
 }
 
@@ -23,6 +29,38 @@ function getPrompt(payload: Record<string, unknown>): string {
     if (typeof prompt === 'string') return prompt
   }
   return '프롬프트 없음'
+}
+
+function formatDuration(sec: number | null | undefined): string {
+  if (sec == null || Number.isNaN(sec)) return '-'
+  if (sec < 60) return `${sec < 10 ? sec.toFixed(1) : Math.round(sec)}초`
+  const m = Math.floor(sec / 60)
+  const r = Math.round(sec % 60)
+  return r ? `${m}분 ${r}초` : `${m}분`
+}
+
+/** Seconds since an ISO time, for jobs still waiting or running. */
+function since(iso: string | null | undefined): number | null {
+  if (!iso) return null
+  const t = new Date(iso).getTime()
+  return Number.isNaN(t) ? null : Math.max(0, (Date.now() - t) / 1000)
+}
+
+const STATUS_LABEL: Record<string, string> = { queued: '대기 중', running: '생성 중', completed: '완료', failed: '실패', cancelled: '취소' }
+
+/** Status badge text and colour for a request's generation, with the time it took (or is taking). */
+function timingBadge(result: RequestEvent['result']): { text: string; tone: string } | null {
+  if (!result) return null
+  const label = STATUS_LABEL[result.status] ?? result.status
+  if (result.status === 'running') return { text: `${label} · ${formatDuration(since(result.started_at))}`, tone: 'border-violet-500/40 bg-violet-500/10 text-violet-200' }
+  if (result.status === 'queued') return { text: `${label} · ${formatDuration(since(result.created_at))}`, tone: 'border-neutral-700 bg-neutral-900 text-neutral-400' }
+  const tone =
+    result.status === 'completed'
+      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+      : result.status === 'failed'
+        ? 'border-red-500/30 bg-red-500/10 text-red-300'
+        : 'border-neutral-700 bg-neutral-900 text-neutral-400'
+  return { text: result.run_seconds != null ? `${label} · ${formatDuration(result.run_seconds)}` : label, tone }
 }
 
 function formatTime(value: string): string {
@@ -65,6 +103,10 @@ export default function ApiDashboard({ onBack }: { onBack: () => void }) {
     })
   }, [requests, query, endpointFilter])
   const selected = filtered.find((item) => item.id === selectedId) ?? filtered[0]
+  const avgRun = useMemo(() => {
+    const done = filtered.map((i) => i.result).filter((r) => r?.status === 'completed' && r.run_seconds != null)
+    return done.length ? { sec: done.reduce((s, r) => s + (r!.run_seconds ?? 0), 0) / done.length, n: done.length } : null
+  }, [filtered])
 
   async function clearLogs() {
     if (!window.confirm('현재 메모리에 보관된 요청 로그를 모두 비울까요?')) return
@@ -96,12 +138,16 @@ export default function ApiDashboard({ onBack }: { onBack: () => void }) {
 
       <div className="mx-auto max-w-7xl space-y-5 p-6">
         {error && <div className="rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">{error}</div>}
-        <section className="grid gap-3 sm:grid-cols-3">
+        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4">
             <p className="text-sm text-neutral-400">보관된 요청</p><p className="mt-2 text-3xl font-semibold">{requests.length}<span className="ml-1 text-sm text-neutral-500">/ 500</span></p>
           </div>
           <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4">
             <p className="text-sm text-neutral-400">필터 결과</p><p className="mt-2 text-3xl font-semibold">{filtered.length}</p>
+          </div>
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4">
+            <p className="text-sm text-neutral-400">평균 생성 시간</p>
+            <p className="mt-2 text-3xl font-semibold">{avgRun ? formatDuration(avgRun.sec) : '-'}{avgRun && <span className="ml-1 text-sm text-neutral-500">완료 {avgRun.n}건</span>}</p>
           </div>
           <div className="flex items-center justify-between rounded-2xl border border-neutral-800 bg-neutral-900/60 p-4">
             <div><p className="text-sm text-neutral-400">API 종류</p><p className="mt-2 text-3xl font-semibold">{endpoints.length}</p></div>
@@ -122,7 +168,13 @@ export default function ApiDashboard({ onBack }: { onBack: () => void }) {
                 <button key={item.id} onClick={() => setSelectedId(item.id)} className={`block w-full border-b border-neutral-800/80 p-4 text-left hover:bg-neutral-900 ${selected?.id === item.id ? 'bg-violet-500/10' : ''}`}>
                   <div className="flex items-center justify-between gap-3"><span className="font-mono text-sm text-violet-300">{item.endpoint}</span><span className="shrink-0 text-xs text-neutral-500">{formatTime(item.created_at)}</span></div>
                   <p className="mt-2 line-clamp-2 text-sm text-neutral-300">{getPrompt(item.payload)}</p>
-                  <p className="mt-2 text-xs text-neutral-500">요청 #{item.id}</p>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <p className="text-xs text-neutral-500">요청 #{item.id}</p>
+                    {(() => {
+                      const b = timingBadge(item.result)
+                      return b ? <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] tabular-nums ${b.tone}`}>{b.text}</span> : null
+                    })()}
+                  </div>
                 </button>
               ))}
             </div>
@@ -138,6 +190,20 @@ export default function ApiDashboard({ onBack }: { onBack: () => void }) {
                   <div><p className="text-xs font-medium text-neutral-300">생성 결과</p><p className="mt-0.5 text-[11px] text-neutral-500">{selected.result ? `작업 #${selected.result.id} · ${selected.result.status}` : selected.generation_id ? `작업 #${selected.generation_id} 연결 중` : '생성 작업에 연결되지 않은 요청'}</p></div>
                   <button disabled={!selected.result?.image_path} onClick={() => setShowImage((value) => !value)} className="rounded-md border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300 hover:bg-neutral-900 disabled:opacity-40">{showImage ? '이미지 숨기기' : '이미지 보기'}</button>
                 </div>
+                {selected.result && (
+                  <div className="grid grid-cols-3 gap-2 border-b border-neutral-800 px-3 py-3 text-center">
+                    {([
+                      ['대기', selected.result.wait_seconds ?? (selected.result.status === 'queued' ? since(selected.result.created_at) : null)],
+                      ['생성', selected.result.run_seconds ?? (selected.result.status === 'running' ? since(selected.result.started_at) : null)],
+                      ['전체', selected.result.total_seconds ?? (['queued', 'running'].includes(selected.result.status) ? since(selected.result.created_at) : null)],
+                    ] as [string, number | null][]).map(([label, sec]) => (
+                      <div key={label}>
+                        <p className="text-[11px] text-neutral-500">{label}</p>
+                        <p className="mt-0.5 text-sm font-medium tabular-nums text-neutral-200">{formatDuration(sec)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {showImage && selected.result?.image_path && (
                   <div className="p-3">
                     {selected.result.media_type === 'video' || /\.(mp4|webm|mkv)(\?|$)/i.test(selected.result.image_path)

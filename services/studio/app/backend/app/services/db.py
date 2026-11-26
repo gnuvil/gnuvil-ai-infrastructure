@@ -38,7 +38,12 @@ def init_db():
         )
         """
     )
-    for column, ddl in (("media_type", "TEXT NOT NULL DEFAULT 'image'"), ("frames", "INTEGER NOT NULL DEFAULT 0")):
+    for column, ddl in (
+        ("media_type", "TEXT NOT NULL DEFAULT 'image'"),
+        ("frames", "INTEGER NOT NULL DEFAULT 0"),
+        ("started_at", "TEXT"),  # when the worker began running it (queue wait = started_at - created_at)
+        ("finished_at", "TEXT"),  # completed / failed / cancelled
+    ):
         try:
             conn.execute(f"ALTER TABLE generations ADD COLUMN {column} {ddl}")
         except sqlite3.OperationalError:
@@ -137,17 +142,19 @@ def create_generation(**kwargs) -> int:
 
 
 def update_generation_status(generation_id: int, status: str, image_path: str | None = None):
-    conn = get_connection()
+    now = datetime.now(timezone.utc).isoformat()
+    sets, args = ["status = ?"], [status]
     if image_path is not None:
-        conn.execute(
-            "UPDATE generations SET status = ?, image_path = ? WHERE id = ?",
-            (status, image_path, generation_id),
-        )
-    else:
-        conn.execute(
-            "UPDATE generations SET status = ? WHERE id = ?",
-            (status, generation_id),
-        )
+        sets.append("image_path = ?")
+        args.append(image_path)
+    if status == "running":
+        sets.append("started_at = COALESCE(started_at, ?)")
+        args.append(now)
+    elif status in ("completed", "failed", "cancelled"):
+        sets.append("finished_at = ?")
+        args.append(now)
+    conn = get_connection()
+    conn.execute(f"UPDATE generations SET {', '.join(sets)} WHERE id = ?", (*args, generation_id))
     conn.commit()
     conn.close()
 
@@ -175,7 +182,7 @@ def get_generations(generation_ids: list[int]) -> dict[int, sqlite3.Row]:
     placeholders = ",".join("?" for _ in generation_ids)
     conn = get_connection()
     rows = conn.execute(
-        f"SELECT id, status, image_path, media_type FROM generations WHERE id IN ({placeholders})",
+        f"SELECT id, status, image_path, media_type, created_at, started_at, finished_at FROM generations WHERE id IN ({placeholders})",
         generation_ids,
     ).fetchall()
     conn.close()

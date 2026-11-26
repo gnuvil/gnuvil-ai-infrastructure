@@ -2,7 +2,7 @@
 services:
   studio:
     platform: linux/amd64
-    image: gnuvil-ai/studio:2a34e96
+    image: gnuvil-ai/studio:96301e2
     build:
       context: .
     # Companion of the comfyui GPU group (configs/gpu-policy.yaml): started and stopped with ComfyUI.
