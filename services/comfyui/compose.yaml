@@ -1,0 +1,25 @@
+---
+services:
+  comfyui:
+    platform: linux/amd64
+    image: gnuvil-ai/comfyui:0d0e105-cu126
+    build:
+      context: .
+    profiles: [comfyui]
+    gpus: all
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      HOME: /data/user
+    ports:
+      - "127.0.0.1:8188:8188"
+      - "192.168.50.14:8188:8188"
+    volumes:
+      - /srv/ai-data/models/comfyui/checkpoints:/opt/ComfyUI/models/checkpoints:ro
+      - /srv/ai-data/outputs/comfyui:/data/output
+      - /srv/ai-data/state/comfyui/input:/data/input
+      - /srv/ai-data/state/comfyui/user:/data/user
+    pull_policy: never
+    restart: "no"
+    stop_signal: SIGINT
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]

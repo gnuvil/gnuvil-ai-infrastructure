@@ -38,8 +38,8 @@ def read_policy():
     for service, mode in policy["services"].items():
         if not isinstance(service, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*", service):
             raise ValueError(f"Invalid GPU service name: {service!r}")
-        if mode != "job":
-            raise ValueError(f"{service}: the supported GPU service type is job")
+        if mode not in ("job", "service"):
+            raise ValueError(f"{service}: GPU service type must be job or service")
     return policy
 
 
@@ -69,6 +69,8 @@ def validate_compose(policy, config):
             raise ValueError(f"{name}: privileged mode and deploy restart policies are forbidden")
         if not service.get("image") or service.get("pull_policy") != "never":
             raise ValueError(f"{name}: use a local image and pull_policy: never")
+        if service.get("stop_signal", "SIGTERM") not in ("SIGTERM", "SIGINT"):
+            raise ValueError(f"{name}: stop_signal must be SIGTERM or SIGINT")
 
 
 def container_ids(project, service, *, running):
@@ -106,19 +108,26 @@ def gpu_idle(memory_limit):
     return not processes and int(memory[0]) <= memory_limit
 
 
-def stop_managed_services(project, policy, confirm_stop):
-    active = active_containers(project, policy["services"])
+def stop_managed_services(project, policy, confirm_stop, config):
+    active_by_service = {
+        name: container_ids(project, name, running=True)
+        for name in policy["services"]
+    }
+    active = any(active_by_service.values())
     if active and not confirm_stop:
         raise RuntimeError(
             "A managed GPU container is active. Check status, drain its work, "
             "then rerun with CONFIRM=1."
         )
     if active:
-        run((*DOCKER, "kill", "--signal=SIGTERM", *active))
+        for name, containers in active_by_service.items():
+            if containers:
+                stop_signal = config["services"][name].get("stop_signal", "SIGTERM")
+                run((*DOCKER, "kill", f"--signal={stop_signal}", *containers))
         wait_until(
             lambda: not active_containers(project, policy["services"]),
             policy["stop_timeout_seconds"],
-            "A managed container did not exit after SIGTERM. Inspect it before retrying.",
+            "A managed container did not exit after its stop signal. Inspect it before retrying.",
         )
     wait_until(
         lambda: gpu_idle(policy["idle_memory_mib"]),
@@ -146,6 +155,29 @@ def run_job(project, service, policy):
         "The job exited, but the GPU has not returned to its idle state.",
     )
     print(f"{service} completed successfully. The GPU is idle.")
+
+
+def run_service(project, service):
+    run((*COMPOSE, "up", "--detach", "--no-deps", "--no-build", "--pull", "never",
+         "--force-recreate", service), capture=False)
+    containers = container_ids(project, service, running=False)
+    if len(containers) != 1:
+        raise RuntimeError(f"Expected exactly one container for {service}, found {len(containers)}")
+    container = containers[0]
+
+    def ready():
+        status = run((*DOCKER, "inspect", "--format", "{{.State.Status}}", container)).strip()
+        if status != "running":
+            raise RuntimeError(f"{service} exited during startup; inspect its logs")
+        try:
+            run((*DOCKER, "exec", container, "python3", "-c",
+                 "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8188/system_stats', timeout=2).read()"))
+            return True
+        except subprocess.CalledProcessError:
+            return False
+
+    wait_until(ready, 180, f"{service} did not become ready; inspect its logs before retrying")
+    print(f"{service} is ready. Drain its queue before switching GPU services.")
 
 
 def main():
@@ -188,9 +220,12 @@ def main():
                 run((*DOCKER, "image", "inspect", image))
             except subprocess.CalledProcessError:
                 raise RuntimeError(f"Cannot inspect {image}. Run sudo make build SERVICE={args.service} first.") from None
-        stop_managed_services(project, policy, args.confirm_stop)
+        stop_managed_services(project, policy, args.confirm_stop, config)
         if args.service:
-            run_job(project, args.service, policy)
+            if policy["services"][args.service] == "job":
+                run_job(project, args.service, policy)
+            else:
+                run_service(project, args.service)
         else:
             print("All managed GPU services are stopped and the GPU is idle.")
 

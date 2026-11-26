@@ -39,5 +39,6 @@ VM의 사전 조건, 스토리지 선택과 재부팅 절차는 [설치 및 검�
 - [설치 및 실제 VM 검증](docs/installation.md)
 - [하드웨어 호환성 및 버전 근거](docs/compatibility.md)
 - [재구축 및 백업 복구](docs/recovery.md)
+- [ComfyUI와 NoobAI XL V-Pred 설치 및 사용](services/comfyui/README.md)
 
-후속 작업은 새 VM에서 구성과 재부팅, CUDA 테스트를 검증하고 기준 버전을 기록하는 것부터 시작한다. 이후 llama.cpp, ComfyUI, RVC, 음원 분리, Whisper, CPU 기반 Open WebUI를 개별 서비스로 추가한다. 첫 모델을 도입할 때 모델 매니페스트와 체크섬 검증을 함께 작성한다.
+ComfyUI와 NoobAI 모델 매니페스트가 추가되어 있다. 새 VM에서는 구성과 재부팅, CUDA 테스트 및 서비스별 검증을 수행하고 기준 버전을 기록한다. llama.cpp, RVC, 음원 분리, Whisper, CPU 기반 Open WebUI는 향후 개별 서비스로 추가할 수 있다.

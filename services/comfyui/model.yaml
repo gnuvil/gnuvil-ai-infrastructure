@@ -1,0 +1,7 @@
+---
+model: NoobAI-XL V-Pred 1.0
+filename: NoobAI-XL-Vpred-v1.0.safetensors
+source: https://huggingface.co/Laxhar/noobai-XL-Vpred-1.0
+revision: 647714aee089d7977e2e835142852ff8d3c2c6e0
+sha256: ea349eeae87ca8d25ba902c93810f7ca83e5c82f920edf12f273af004ae02819
+license: fair-ai-public-license-1.0-sd with additional terms; see model card
