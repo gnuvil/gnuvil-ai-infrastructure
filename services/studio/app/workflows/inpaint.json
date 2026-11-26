@@ -1,0 +1,198 @@
+{
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 28,
+      "cfg": 5.0,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 0.85,
+      "model": [
+        "17",
+        0
+      ],
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "14",
+        0
+      ]
+    }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "PLACEHOLDER_CHECKPOINT"
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "PLACEHOLDER_POSITIVE_PROMPT",
+      "clip": [
+        "4",
+        1
+      ]
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "PLACEHOLDER_NEGATIVE_PROMPT",
+      "clip": [
+        "4",
+        1
+      ]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "local_image_ai",
+      "images": [
+        "16",
+        0
+      ]
+    }
+  },
+  "10": {
+    "class_type": "ModelSamplingDiscrete",
+    "inputs": {
+      "sampling": "eps",
+      "zsnr": false,
+      "model": [
+        "4",
+        0
+      ]
+    }
+  },
+  "11": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "12",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    }
+  },
+  "12": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "PLACEHOLDER_IMAGE"
+    }
+  },
+  "13": {
+    "class_type": "LoadImageMask",
+    "inputs": {
+      "image": "PLACEHOLDER_MASK",
+      "channel": "red"
+    }
+  },
+  "14": {
+    "class_type": "SetLatentNoiseMask",
+    "inputs": {
+      "samples": [
+        "11",
+        0
+      ],
+      "mask": [
+        "20",
+        0
+      ]
+    }
+  },
+  "15": {
+    "class_type": "GrowMask",
+    "inputs": {
+      "mask": [
+        "13",
+        0
+      ],
+      "expand": 6,
+      "tapered_corners": true
+    }
+  },
+  "16": {
+    "class_type": "ImageCompositeMasked",
+    "inputs": {
+      "destination": [
+        "12",
+        0
+      ],
+      "source": [
+        "8",
+        0
+      ],
+      "x": 0,
+      "y": 0,
+      "resize_source": false,
+      "mask": [
+        "20",
+        0
+      ]
+    }
+  },
+  "17": {
+    "class_type": "DifferentialDiffusion",
+    "inputs": {
+      "model": [
+        "10",
+        0
+      ]
+    }
+  },
+  "18": {
+    "class_type": "MaskToImage",
+    "inputs": {
+      "mask": [
+        "15",
+        0
+      ]
+    }
+  },
+  "19": {
+    "class_type": "ImageBlur",
+    "inputs": {
+      "image": [
+        "18",
+        0
+      ],
+      "blur_radius": 16,
+      "sigma": 8.0
+    }
+  },
+  "20": {
+    "class_type": "ImageToMask",
+    "inputs": {
+      "image": [
+        "19",
+        0
+      ],
+      "channel": "red"
+    }
+  }
+}
