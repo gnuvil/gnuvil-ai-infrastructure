@@ -5,7 +5,8 @@ services:
     image: gnuvil-ai/studio:333b4c2
     build:
       context: .
-    profiles: [studio]
+    # Companion of the comfyui GPU group (configs/gpu-policy.yaml): started and stopped with ComfyUI.
+    profiles: [comfyui]
     user: "1000:1000"
     environment:
       # Same Compose project, so the ComfyUI container is reachable by service name when it runs.

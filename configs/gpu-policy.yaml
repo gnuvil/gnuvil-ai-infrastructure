@@ -5,6 +5,8 @@ services:
     mode: service
     ready_url: http://127.0.0.1:8188/system_stats
     probe_socket: /run/gnuvil-comfyui/lifecycle.sock
+    # Image AI Studio (CPU-only UI) starts and stops together with ComfyUI
+    companions: [studio]
   llamacpp:
     mode: service
     ready_url: http://127.0.0.1:8081/health
