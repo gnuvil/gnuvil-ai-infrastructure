@@ -1,13 +1,150 @@
 @import "tailwindcss";
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+
+/* Cool "ink" greys replace Tailwind's neutral scale, so every existing neutral-* class picks up the new look. */
+@theme {
+  --font-sans: "Pretendard Variable", Pretendard, system-ui, "Segoe UI", sans-serif;
+  --color-neutral-50: #f6f7fb;
+  --color-neutral-100: #eceef6;
+  --color-neutral-200: #d6daea;
+  --color-neutral-300: #b6bcd2;
+  --color-neutral-400: #8d94ae;
+  --color-neutral-500: #6a718c;
+  --color-neutral-600: #4d536c;
+  --color-neutral-700: #363b51;
+  --color-neutral-800: #252939;
+  --color-neutral-900: #191c29;
+  --color-neutral-950: #0f111a;
+}
 
 :root {
   color-scheme: dark;
+  --accent-from: #8b5cf6;
+  --accent-to: #d946ef;
 }
 
 html, body, #root {
   height: 100%;
   margin: 0;
-  background-color: #0f1115;
-  color: #e5e7eb;
-  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  background-color: #0b0d14;
+  color: var(--color-neutral-100);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Form controls: one consistent look and an accent focus ring */
+input, select, textarea {
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--color-violet-500);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-violet-500) 25%, transparent);
+}
+input[type="range"], input[type="checkbox"], input[type="radio"] {
+  accent-color: var(--color-violet-500);
+}
+select {
+  cursor: pointer;
+}
+button {
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s, border-color 0.15s, opacity 0.15s, transform 0.1s;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* Thin scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-neutral-700) transparent;
+}
+
+@layer components {
+  .field {
+    width: 100%;
+    background-color: var(--color-neutral-950);
+    border: 1px solid var(--color-neutral-800);
+    border-radius: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.875rem;
+  }
+  .field-sm {
+    font-size: 0.75rem;
+  }
+  .card {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-neutral-900) 90%, transparent), color-mix(in srgb, var(--color-neutral-900) 60%, transparent));
+    border: 1px solid var(--color-neutral-800);
+    border-radius: 0.875rem;
+    padding: 0.875rem;
+  }
+  .section-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-neutral-400);
+    margin-bottom: 0.6rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .section-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-neutral-400);
+    text-align: left;
+  }
+  .section-toggle:hover {
+    color: var(--color-neutral-200);
+  }
+  .btn-primary {
+    background-image: linear-gradient(135deg, var(--accent-from), var(--accent-to));
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 6px 20px -8px color-mix(in srgb, var(--accent-to) 70%, transparent);
+  }
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+  .btn-primary:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+  .btn-primary:disabled {
+    background-image: none;
+    background-color: var(--color-neutral-800);
+    color: var(--color-neutral-500);
+    box-shadow: none;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 9999px;
+    border: 1px solid var(--color-neutral-800);
+    background-color: var(--color-neutral-900);
+    color: var(--color-neutral-300);
+  }
+  .chip:hover {
+    border-color: var(--color-violet-500);
+    color: var(--color-neutral-50);
+    background-color: color-mix(in srgb, var(--color-violet-500) 12%, var(--color-neutral-900));
+  }
+  .accent-text {
+    background-image: linear-gradient(135deg, #c4b5fd, #f0abfc);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
 }

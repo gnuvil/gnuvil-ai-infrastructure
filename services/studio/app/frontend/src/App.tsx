@@ -78,6 +78,21 @@ function isVideoUrl(url?: string | null): boolean {
   return !!url && /\.(mp4|webm|mkv)$/i.test(url)
 }
 
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M5 8l5 5 5-5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+const EXAMPLE_PROMPTS = [
+  '1girl, silver hair, school uniform, cherry blossoms, wind, smile',
+  'scenery, night city, neon lights, rain, reflections, cinematic',
+  '1boy, knight, armor, cape, castle, sunset, dramatic lighting',
+  'chibi, cat ears, hoodie, cozy room, warm light',
+]
+
 /** Same rule as the old server-side merge: character tags first, then the request's tags without duplicates. */
 function mergeCharacterTags(chars: Character[], prompt: string): string {
   const split = (t: string) => t.split(',').map((x) => x.trim()).filter(Boolean)
@@ -830,14 +845,22 @@ function App() {
 
   return (
     dashboardMode ? <ApiDashboard onBack={() => setDashboardMode(false)} /> :
-    <div className="flex h-screen w-screen bg-neutral-950 text-neutral-100">
-      <aside className="w-72 shrink-0 border-r border-neutral-800 overflow-y-auto p-4 space-y-4">
-        <h2 className="text-sm font-semibold text-neutral-400 uppercase tracking-wide">설정</h2>
+    <div className="flex h-screen w-screen bg-[#0b0d14] text-neutral-100">
+      <aside className="w-80 shrink-0 border-r border-neutral-800/80 bg-neutral-950/60 overflow-y-auto p-4 space-y-3">
+        <div className="flex items-center gap-3 px-1 pb-2">
+          <div className="w-9 h-9 rounded-xl grid place-items-center text-lg shadow-lg shadow-fuchsia-500/20" style={{ backgroundImage: 'linear-gradient(135deg, var(--accent-from), var(--accent-to))' }}>✦</div>
+          <div>
+            <p className="text-sm font-semibold leading-tight">Image AI Studio</p>
+            <p className="text-[11px] text-neutral-500 leading-tight">그누빌 AI Lab · V100</p>
+          </div>
+        </div>
 
+        <section className="card space-y-3">
+          <h3 className="section-title">모델</h3>
         <div className="space-y-1">
           <label className="text-xs text-neutral-400">Checkpoint</label>
           <select
-            className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-sm"
+            className="field"
             value={checkpoint}
             onChange={(e) => setCheckpoint(e.target.value)}
           >
@@ -854,7 +877,7 @@ function App() {
         <div className="space-y-1">
           <label className="text-xs text-neutral-400">VAE (비워두면 체크포인트 기본값)</label>
           <select
-            className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-sm"
+            className="field"
             value={vae}
             onChange={(e) => setVae(e.target.value)}
           >
@@ -870,7 +893,7 @@ function App() {
         <div className="space-y-1">
           <label className="text-xs text-neutral-400">LoRA</label>
           <select
-            className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-sm"
+            className="field"
             value=""
             onChange={(e) => addLora(e.target.value)}
           >
@@ -973,7 +996,10 @@ function App() {
             </div>
           )}
         </div>
+        </section>
 
+        <section className="card space-y-3">
+          <h3 className="section-title">프롬프트</h3>
         <div className="space-y-1">
           <label className="text-xs text-neutral-400">Prompt Prefix (자동으로 앞에 붙음)</label>
           <TagSuggestField
@@ -995,12 +1021,15 @@ function App() {
             placeholder="low quality, blurry..."
           />
         </div>
+        </section>
 
+        <section className="card">
+          <h3 className="section-title">생성 옵션</h3>
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1">
             <label className="text-xs text-neutral-400">Seed (빈칸=랜덤)</label>
             <input
-              className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-sm"
+              className="field"
               value={seed}
               onChange={(e) => setSeed(e.target.value)}
               placeholder="random"
@@ -1009,7 +1038,7 @@ function App() {
           <div className="space-y-1">
             <label className="text-xs text-neutral-400">Sampler</label>
             <select
-              className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-sm"
+              className="field"
               value={sampler}
               onChange={(e) => setSampler(e.target.value)}
             >
@@ -1023,7 +1052,7 @@ function App() {
           <div className="space-y-1 col-span-2">
             <label className="text-xs text-neutral-400">Prediction Type</label>
             <select
-              className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-sm"
+              className="field"
               value={sampling}
               onChange={(e) => setSampling(e.target.value)}
             >
@@ -1035,7 +1064,7 @@ function App() {
             <label className="text-xs text-neutral-400">Steps</label>
             <input
               type="number"
-              className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-sm"
+              className="field"
               value={steps}
               onChange={(e) => setSteps(Number(e.target.value))}
             />
@@ -1045,7 +1074,7 @@ function App() {
             <input
               type="number"
               step="0.5"
-              className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-sm"
+              className="field"
               value={cfg}
               onChange={(e) => setCfg(Number(e.target.value))}
             />
@@ -1053,13 +1082,13 @@ function App() {
           <div className="space-y-1">
             <label className="text-xs text-neutral-400">Width</label>
             {sourceImage ? (
-              <div className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-sm text-neutral-500">
+              <div className="field text-neutral-500">
                 원본 크기 사용
               </div>
             ) : (
               <input
                 type="number"
-                className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-sm"
+                className="field"
                 value={width}
                 onChange={(e) => setWidth(Number(e.target.value))}
               />
@@ -1068,13 +1097,13 @@ function App() {
           <div className="space-y-1">
             <label className="text-xs text-neutral-400">Height</label>
             {sourceImage ? (
-              <div className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-sm text-neutral-500">
+              <div className="field text-neutral-500">
                 원본 크기 사용
               </div>
             ) : (
               <input
                 type="number"
-                className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-sm"
+                className="field"
                 value={height}
                 onChange={(e) => setHeight(Number(e.target.value))}
               />
@@ -1099,7 +1128,7 @@ function App() {
             <div className="space-y-1 col-span-2">
               <label className="text-xs text-neutral-400">영역 처리 방식</label>
               <select
-                className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-xs"
+                className="field field-sm"
                 value={inpaintMode}
                 onChange={(e) => setInpaintMode(e.target.value as 'auto' | 'keep' | 'fill')}
               >
@@ -1109,7 +1138,7 @@ function App() {
               </select>
               <label className="text-xs text-neutral-400">주변 문맥 사용 (마스크 주변을 확대해서 다시 그림)</label>
               <select
-                className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-xs"
+                className="field field-sm"
                 value={contextCrop}
                 onChange={(e) => setContextCrop(e.target.value as 'auto' | 'always' | 'off')}
               >
@@ -1161,14 +1190,15 @@ function App() {
             )}
           </div>
         </div>
+        </section>
 
-        <div className="pt-2 border-t border-neutral-800">
+        <div className="card">
           <button
-            className="w-full text-left text-xs text-neutral-400 uppercase tracking-wide font-semibold flex items-center justify-between"
+            className="section-toggle"
             onClick={() => setCharacterOpen((v) => !v)}
           >
             <span>캐릭터{characters.length > 0 ? ` (${characters.length})` : ''}</span>
-            <span>{characterOpen ? '▲' : '▼'}</span>
+            <Chevron open={characterOpen} />
           </button>
           {characterOpen && (
             <CharacterPanel
@@ -1181,13 +1211,13 @@ function App() {
           )}
         </div>
 
-        <div className="pt-2 border-t border-neutral-800">
+        <div className="card">
           <button
-            className="w-full text-left text-xs text-neutral-400 uppercase tracking-wide font-semibold flex items-center justify-between"
+            className="section-toggle"
             onClick={() => setQwenOpen((v) => !v)}
           >
             <span>Qwen-Image</span>
-            <span>{qwenOpen ? '▲' : '▼'}</span>
+            <Chevron open={qwenOpen} />
           </button>
           {qwenOpen && (
             <div className="mt-2 space-y-2">
@@ -1221,7 +1251,7 @@ function App() {
               {qwenEnabled && (
                 <>
                   <select
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-xs"
+                    className="field field-sm"
                     value=""
                     onChange={(e) => addQwenLora(e.target.value)}
                   >
@@ -1266,13 +1296,13 @@ function App() {
           )}
         </div>
 
-        <div className="pt-2 border-t border-neutral-800">
+        <div className="card">
           <button
-            className="w-full text-left text-xs text-neutral-400 uppercase tracking-wide font-semibold flex items-center justify-between"
+            className="section-toggle"
             onClick={() => setControlnetOpen((v) => !v)}
           >
             <span>ControlNet</span>
-            <span>{controlnetOpen ? '▲' : '▼'}</span>
+            <Chevron open={controlnetOpen} />
           </button>
           {controlnetOpen && (
             <div className="mt-2 space-y-2">
@@ -1325,7 +1355,7 @@ function App() {
                   )}
 
                   <select
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-xs"
+                    className="field field-sm"
                     value={controlnetModel}
                     onChange={(e) => {
                       setControlnetModel(e.target.value)
@@ -1344,7 +1374,7 @@ function App() {
                   </select>
 
                   <select
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-xs"
+                    className="field field-sm"
                     value={controlnetPreprocessor}
                     onChange={(e) => {
                       setControlnetPreprocessor(e.target.value as 'none' | 'canny' | 'openpose')
@@ -1446,13 +1476,13 @@ function App() {
           )}
         </div>
 
-        <div className="pt-2 border-t border-neutral-800">
+        <div className="card">
           <button
-            className="w-full text-left text-xs text-neutral-400 uppercase tracking-wide font-semibold flex items-center justify-between"
+            className="section-toggle"
             onClick={() => setIpOpen((v) => !v)}
           >
             <span>IP-Adapter</span>
-            <span>{ipOpen ? '▲' : '▼'}</span>
+            <Chevron open={ipOpen} />
           </button>
           {ipOpen && (
             <div className="mt-2 space-y-2">
@@ -1483,7 +1513,7 @@ function App() {
                     <img src={ipImage.previewUrl} alt="reference" className="w-16 h-16 object-cover rounded border border-neutral-700" />
                   )}
                   <select
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-xs"
+                    className="field field-sm"
                     value={ipModel}
                     onChange={(e) => setIpModel(e.target.value)}
                   >
@@ -1493,7 +1523,7 @@ function App() {
                     ))}
                   </select>
                   <select
-                    className="w-full bg-neutral-900 border border-neutral-700 rounded-md px-2 py-1.5 text-xs"
+                    className="field field-sm"
                     value={clipVisionModel}
                     onChange={(e) => setClipVisionModel(e.target.value)}
                   >
@@ -1525,7 +1555,7 @@ function App() {
           )}
         </div>
 
-        <div className="pt-2 border-t border-neutral-800 space-y-2">
+        <div className="card space-y-2">
           <label className="flex items-center gap-2 text-xs text-neutral-400">
             <input type="checkbox" checked={faceDetailer} onChange={(e) => setFaceDetailer(e.target.checked)} />
             Face/Hand Detailer (감지된 영역 자동 재보정)
@@ -1557,32 +1587,13 @@ function App() {
           )}
         </div>
 
-        <div className="pt-2 border-t border-neutral-800 text-xs text-neutral-400 space-y-1">
-          <p className="text-neutral-500 uppercase tracking-wide font-semibold">GPU</p>
-          {gpu ? (
-            <>
-              <p>{gpu.name}</p>
-              <p>
-                VRAM {(gpu.vram_used_mb / 1024).toFixed(1)} / {(gpu.vram_total_mb / 1024).toFixed(1)} GB
-              </p>
-              {gpu.utilization_percent != null && (
-                <p>
-                  Util {gpu.utilization_percent}% · {gpu.temperature_c}°C
-                </p>
-              )}
-            </>
-          ) : (
-            <p>GPU 정보 없음</p>
-          )}
-        </div>
-
-        <div className="pt-2 border-t border-neutral-800">
+        <div className="card">
           <button
-            className="w-full text-left text-xs text-neutral-400 uppercase tracking-wide font-semibold flex items-center justify-between"
+            className="section-toggle"
             onClick={toggleHistory}
           >
             <span>히스토리</span>
-            <span>{historyOpen ? '▲' : '▼'}</span>
+            <Chevron open={historyOpen} />
           </button>
           {historyOpen && (
             <div className="mt-2 space-y-1 max-h-64 overflow-y-auto">
@@ -1612,35 +1623,89 @@ function App() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col">
-        <header className="px-4 py-3 border-b border-neutral-800">
+      <main className="flex-1 flex flex-col min-w-0 relative">
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 h-72 opacity-60"
+          style={{ background: 'radial-gradient(60% 100% at 50% 0%, rgba(139,92,246,0.18), transparent 70%)' }}
+        />
+        <header className="relative px-6 py-3 border-b border-neutral-800/80 bg-neutral-950/40 backdrop-blur">
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-base font-semibold">Local Image AI Studio</h1>
-            <button className="text-xs text-violet-400 hover:text-violet-300" onClick={() => setDashboardMode(true)}>
+            <h1 className="text-base font-semibold tracking-tight">
+              <span className="accent-text">Studio</span>
+            </h1>
+            <span
+              className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${
+                gpu ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+              }`}
+              title={gpu ? 'ComfyUI가 실행 중입니다' : '포털에서 ComfyUI를 켜야 생성할 수 있습니다'}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${gpu ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              {gpu ? 'ComfyUI 연결됨' : 'ComfyUI 꺼짐'}
+            </span>
+            {gpu && (
+              <div className="flex items-center gap-2 text-xs text-neutral-400" title={gpu.name}>
+                <span>VRAM</span>
+                <div className="w-28 h-1.5 rounded-full bg-neutral-800 overflow-hidden">
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${Math.min(100, (gpu.vram_used_mb / Math.max(1, gpu.vram_total_mb)) * 100)}%`,
+                      backgroundImage: 'linear-gradient(90deg, var(--accent-from), var(--accent-to))',
+                    }}
+                  />
+                </div>
+                <span className="tabular-nums">
+                  {(gpu.vram_used_mb / 1024).toFixed(1)} / {(gpu.vram_total_mb / 1024).toFixed(0)} GB
+                </span>
+              </div>
+            )}
+            <button className="ml-auto chip" onClick={() => setDashboardMode(true)}>
               API 요청 대시보드
             </button>
           </div>
         </header>
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        <div ref={scrollRef} className="relative flex-1 overflow-y-auto px-6 py-6">
+          <div className="max-w-3xl mx-auto space-y-5">
           {messages.length === 0 && (
-            <p className="text-neutral-500 text-sm text-center mt-10">
-              프롬프트를 입력하고 이미지를 생성해보세요.
-            </p>
+            <div className="flex flex-col items-center text-center pt-16 pb-6">
+              <div
+                className="w-14 h-14 rounded-2xl grid place-items-center text-2xl shadow-xl shadow-fuchsia-500/20 mb-5"
+                style={{ backgroundImage: 'linear-gradient(135deg, var(--accent-from), var(--accent-to))' }}
+              >
+                ✦
+              </div>
+              <h2 className="text-2xl font-semibold tracking-tight">무엇을 그려 볼까요?</h2>
+              <p className="mt-2 text-sm text-neutral-400 max-w-md">
+                태그를 쉼표로 이어 적으면 됩니다. 이미지를 첨부하면 편집하고, 결과에서 바로 영상으로 이어 만들 수 있어요.
+              </p>
+              {!gpu && (
+                <div className="mt-6 w-full max-w-md text-left rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                  ComfyUI가 꺼져 있어요. <a className="underline underline-offset-2 hover:text-amber-100" href="https://192.168.50.14" target="_blank" rel="noreferrer">포털</a>에서 ComfyUI를 켠 뒤 생성하세요.
+                </div>
+              )}
+              <div className="mt-8 flex flex-wrap justify-center gap-2 max-w-2xl">
+                {EXAMPLE_PROMPTS.map((p) => (
+                  <button key={p} className="chip" onClick={() => setPrompt(p)}>
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
           {messages.map((m) =>
             m.role === 'user' ? (
               <div key={m.id} className="flex justify-end">
-                <div className="max-w-xl bg-violet-600/20 border border-violet-500/30 rounded-2xl px-4 py-2 text-sm space-y-2">
+                <div className="max-w-xl rounded-2xl rounded-br-md px-4 py-2.5 text-sm space-y-2 text-white shadow-lg shadow-violet-900/30" style={{ backgroundImage: 'linear-gradient(135deg, #6d28d9, #a21caf)' }}>
                   {m.sourceImageUrl && (
-                    <img src={m.sourceImageUrl} alt="원본" className="rounded-lg max-h-40" />
+                    <img src={m.sourceImageUrl} alt="원본" className="rounded-lg max-h-40 ring-1 ring-white/20" />
                   )}
                   {m.text}
                 </div>
               </div>
             ) : (
               <div key={m.id} className="flex justify-start">
-                <div className="max-w-xl bg-neutral-900 border border-neutral-800 rounded-2xl px-4 py-3 text-sm space-y-2">
+                <div className="max-w-xl w-fit card rounded-2xl rounded-bl-md px-4 py-3 text-sm space-y-3">
                   {m.note && <p className="text-xs text-neutral-400 whitespace-pre-line">{m.note}</p>}
                   {m.status === 'note' && <p className="text-neutral-300 whitespace-pre-line">{m.text}</p>}
                   {m.status === 'queued' && (
@@ -1655,10 +1720,11 @@ function App() {
                         {m.stage ?? '준비 중'}
                         {m.progress && m.progress.max > 0 && ` · ${m.progress.value}/${m.progress.max} 스텝`}
                       </p>
-                      <div className="h-2 bg-neutral-800 rounded-full overflow-hidden">
+                      <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-violet-500 transition-all"
+                          className="h-full rounded-full transition-all"
                           style={{
+                            backgroundImage: 'linear-gradient(90deg, var(--accent-from), var(--accent-to))',
                             width: m.progress?.total
                               ? `${Math.min(100, ((m.progress.done ?? 0) / m.progress.total) * 100)}%`
                               : m.progress
@@ -1684,9 +1750,9 @@ function App() {
                   {m.status === 'error' && <p className="text-red-400">오류: {m.text}</p>}
                   {m.status === 'done' && m.imageUrl && isVideoUrl(m.imageUrl) && (
                     <>
-                      <video src={m.imageUrl} controls loop muted autoPlay playsInline className="rounded-lg max-w-full max-h-[70vh]" />
+                      <video src={m.imageUrl} controls loop muted autoPlay playsInline className="rounded-xl max-w-full max-h-[70vh] shadow-2xl shadow-black/40 ring-1 ring-white/5" />
                       {m.generationId && interpAvailable && (
-                        <button className="text-xs text-violet-400 hover:text-violet-300" onClick={() => smoothVideo(m.generationId!)}>
+                        <button className="chip" onClick={() => smoothVideo(m.generationId!)}>
                           🎞 부드럽게 (프레임 2배, 약 10초)
                         </button>
                       )}
@@ -1694,22 +1760,22 @@ function App() {
                   )}
                   {m.status === 'done' && m.imageUrl && !isVideoUrl(m.imageUrl) && (
                     <>
-                      <img src={m.imageUrl} alt="generated" className="rounded-lg max-w-full" />
-                      <div className="flex gap-3">
+                      <a href={m.imageUrl} target="_blank" rel="noreferrer"><img src={m.imageUrl} alt="generated" className="rounded-xl max-w-full shadow-2xl shadow-black/40 ring-1 ring-white/5" /></a>
+                      <div className="flex flex-wrap gap-2">
                         <button
-                          className="text-xs text-violet-400 hover:text-violet-300"
+                          className="chip"
                           onClick={() => m.generationId && continueEditing(m.generationId, m.imageUrl!)}
                         >
                           🔁 이 이미지로 계속 편집
                         </button>
                         <button
-                          className="text-xs text-violet-400 hover:text-violet-300"
+                          className="chip"
                           onClick={() => m.generationId && startVideo(m.generationId, m.imageUrl!)}
                         >
                           🎬 영상으로 만들기
                         </button>
                         <button
-                          className="text-xs text-violet-400 hover:text-violet-300"
+                          className="chip"
                           onClick={() => m.generationId && saveAsCharacter(m.generationId)}
                         >
                           👤 캐릭터로 저장
@@ -1721,9 +1787,11 @@ function App() {
               </div>
             ),
           )}
+          </div>
         </div>
 
-        <div className="p-4 border-t border-neutral-800 space-y-2">
+        <div className="relative px-6 pb-5 pt-2">
+          <div className="max-w-3xl mx-auto space-y-2">
           {videoSource && (
             <div className="flex items-center gap-2 bg-neutral-900 border border-neutral-700 rounded-lg px-2 py-1.5 w-fit">
               <img src={videoSource.imageUrl} alt="video source" className="w-10 h-10 object-cover rounded" />
@@ -1830,10 +1898,10 @@ function App() {
               }}
             />
           )}
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2 rounded-2xl border border-neutral-800 bg-neutral-900/90 p-1.5 shadow-2xl shadow-black/40 focus-within:border-violet-500/60">
             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFileSelected} />
             <button
-              className="shrink-0 w-10 h-10 flex items-center justify-center bg-neutral-900 border border-neutral-700 rounded-full text-neutral-400 hover:text-neutral-200"
+              className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800"
               onClick={pickFile}
               title="이미지 업로드"
             >
@@ -1841,19 +1909,20 @@ function App() {
             </button>
             <TagSuggestField
               dropUp
-              className="w-full bg-neutral-900 border border-neutral-700 rounded-full px-4 py-2 text-sm"
+              className="w-full bg-transparent border-0 px-2 py-2 text-sm focus:!shadow-none placeholder:text-neutral-500"
               placeholder={videoSource ? '영어로 움직임을 적어주세요. 예: The girl walks toward the camera, hair flowing' : sourceImage ? '이미지를 어떻게 바꿀까요?' : '이미지를 어떻게 만들까요?'}
               value={prompt}
               onChange={setPrompt}
               onEnter={handleGenerate}
             />
             <button
-              className="bg-violet-600 hover:bg-violet-500 disabled:bg-neutral-800 disabled:text-neutral-500 rounded-full px-5 py-2 text-sm font-medium"
+              className="btn-primary shrink-0 rounded-xl px-5 py-2.5 text-sm"
               onClick={handleGenerate}
               disabled={!prompt.trim() || !checkpoint}
             >
               생성
             </button>
+          </div>
           </div>
         </div>
       </main>
