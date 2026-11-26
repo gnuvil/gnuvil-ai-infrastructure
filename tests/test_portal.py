@@ -585,6 +585,28 @@ class WebTests(unittest.TestCase):
         self.assertIn("확인 불가", response.text)
         self.assertNotIn("SECRET_PATH", response.text)
         self.assertNotIn("0%", response.text)
+        self.assertNotIn("<meter ", response.text)
+
+    def test_dashboard_shows_resource_usage_bars_and_percentages(self):
+        self.data["metrics"] = {
+            "gpu": {"name": "Tesla V100", "utilization": 0, "memory_used": 6144, "memory_total": 16384},
+            "cpu_percent": 8, "ram_used_mib": 8192, "ram_total_mib": 16384,
+        }
+        response = self.client.get("/status", headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        for label, value, text in (("GPU 사용률", 0.0, "0%"), ("GPU 메모리 (VRAM)", 37.5, "37.5%"),
+                                   ("시스템 메모리 (RAM)", 50.0, "50%")):
+            self.assertIn(f'aria-label="{label}" min="0" max="100" value="{value}"', response.text)
+            self.assertIn(f"<strong>{text}</strong>", response.text)
+        self.assertIn("6.0 / 16.0 GB", response.text)
+        self.assertIn("CPU 8%", response.text)
+
+    def test_invalid_memory_capacity_leaves_percentage_unavailable(self):
+        self.data["metrics"] = {"gpu": {"memory_used": 2048, "memory_total": 0}, "ram_total_mib": 8192}
+        response = self.client.get("/status", headers=self.headers)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("<meter ", response.text)
+        self.assertEqual(response.text.count("용량 확인 불가"), 2)
 
     def test_large_body_and_forged_confirmation_rejected(self):
         headers = self.csrf_headers()
