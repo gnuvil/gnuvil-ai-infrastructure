@@ -1685,18 +1685,21 @@ function App() {
 
         <div ref={scrollRef} className="relative flex-1 overflow-y-auto px-6 py-6">
           <div className="max-w-3xl mx-auto space-y-5">
-          {messages.length === 0 && (
-            <div className="relative flex flex-col items-center text-center pt-16 pb-6 anim-in">
+          {/* Hero stays on top; generated cards stack below it. It gets more compact once the chat starts. */}
+          {(() => {
+            const compact = messages.length > 0
+            return (
+            <div className={`relative flex flex-col items-center text-center anim-in transition-all duration-500 ${compact ? 'pt-4 pb-2' : 'pt-16 pb-6'}`}>
               <span className="orb w-72 h-72 -top-10 left-[10%]" style={{ background: '#8b5cf6' }} />
               <span className="orb w-64 h-64 top-24 right-[8%]" style={{ background: '#d946ef', animationDelay: '-5s', ['--fx' as string]: '-40px', ['--fy' as string]: '25px' } as CSSProperties} />
               <span className="orb w-56 h-56 top-56 left-[35%]" style={{ background: '#38bdf8', opacity: 0.2, animationDelay: '-9s' }} />
               <div
-                className="relative w-14 h-14 rounded-2xl grid place-items-center text-2xl mb-5 logo-glow"
+                className={`relative rounded-2xl grid place-items-center logo-glow transition-all duration-500 ${compact ? 'w-10 h-10 text-lg mb-3' : 'w-14 h-14 text-2xl mb-5'}`}
                 style={{ backgroundImage: 'linear-gradient(135deg, var(--accent-from), var(--accent-to))' }}
               >
                 ✦
               </div>
-              <h2 className="relative text-3xl font-semibold tracking-tight">무엇을 <span className="accent-text">그려 볼까요?</span></h2>
+              <h2 className={`relative font-semibold tracking-tight transition-all duration-500 ${compact ? 'text-xl' : 'text-3xl'}`}>무엇을 <span className="accent-text">그려 볼까요?</span></h2>
               <p className="relative mt-2 text-sm text-neutral-400 max-w-md">
                 태그를 쉼표로 이어 적으면 됩니다. 이미지를 첨부하면 편집하고, 결과에서 바로 영상으로 이어 만들 수 있어요.
               </p>
@@ -1705,7 +1708,7 @@ function App() {
                   ComfyUI가 꺼져 있어요. <a className="underline underline-offset-2 hover:text-amber-100" href="https://192.168.50.14" target="_blank" rel="noreferrer">포털</a>에서 ComfyUI를 켠 뒤 생성하세요.
                 </div>
               )}
-              <div className="mt-8 flex flex-wrap justify-center gap-2 max-w-2xl">
+              <div className={`flex flex-wrap justify-center gap-2 max-w-2xl ${compact ? 'mt-4' : 'mt-8'}`}>
                 {EXAMPLE_PROMPTS.map((p, i) => (
                   <button key={p} className="chip anim-in" style={{ animationDelay: `${200 + i * 80}ms` }} onClick={() => setPrompt(p)}>
                     {p}
@@ -1713,7 +1716,8 @@ function App() {
                 ))}
               </div>
             </div>
-          )}
+            )
+          })()}
           {messages.map((m) =>
             m.role === 'user' ? (
               <div key={m.id} className="flex justify-end anim-in">
