@@ -5,11 +5,13 @@ services:
     image: gnuvil-ai/llamacpp:d12cc3d-cu129-router2
     build:
       context: .
+      args:
+        LLAMACPP_BUILD_JOBS: ${LLAMACPP_BUILD_JOBS:-4}
     profiles: [llamacpp]
     gpus: all
     environment:
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
-    command: ["--models-dir", "/models", "--models-preset", "/etc/llamacpp/models.ini", "--models-max", "1"]
+    command: ["--models-dir", "/models", "--models-preset", "/etc/llamacpp/models.ini", "--models-max", "1", "--path", "/opt/llama.cpp/tools/server/public"]
     ports:
       - "127.0.0.1:8081:8080"
     volumes:
