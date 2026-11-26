@@ -23,3 +23,11 @@ V100은 Compute Capability 7.0의 Volta GPU다. NVIDIA의 지원 표에 따르�
 Ubuntu 커널·일반 패키지·R580 보안 패치와 bootstrap의 Python 전이 의존성은 현재 저장소의 가용 버전을 사용한다. 패키지 저장소는 변경될 수 있다. 정확한 Ubuntu 드라이버 패치 버전이 필요한 배포에서는 `nvidia_driver_apt_version`을 지정하고 커널과 패키지 가용성도 함께 기록한다. 오래된 패키지를 계속 재현해야 하면 내부 APT 스냅샷 또는 검증된 패키지 묶음을 보관한다. 서명키가 바뀌었을 때는 원본 키와 새 SHA-256을 확인하여 저장소와 함께 갱신한다.
 
 PyTorch, ComfyUI, Whisper와 기타 AI 앱은 추가 시 해당 Wheel과 CUDA 확장의 `sm_70` 포함 여부, CPU ISA 및 실 GPU에서의 메모리 요구량을 각각 검증한다. 현재 앱 버전 기준선은 없다.
+
+## Gnuvil AI Lab 포털 기준선 (2026-11-26)
+
+Python `3.12-slim-bookworm`과 uv `0.10.9`의 공개 manifest 다이제스트를 Dockerfile에 고정했다. Python manifest는 Docker Hub 태그 API, uv manifest는 GHCR에서 확인했다. 이미지 레이어를 다운로드하거나 대상 VM에서 실행하지 않았다. FastAPI `0.165.0`, Uvicorn `0.54.0`, Jinja2 `3.1.6`, PyYAML `6.0.4` 및 전이 의존성은 PyPI 메타데이터로 확인하고 `uv.lock`에 버전·배포물 해시를 고정했다. 로컬 테스트는 CPython 3.12.12에서 실행했다. HTMX `2.0.8`은 공식 GitHub 릴리스 파일을 자체 호스팅하며 SHA-256은 `22283ef68cb7545914f0a88a1bdedc7256a703d1d580c1d255217d0a50d31313`이다.
+
+포털에는 GPU 및 CUDA 의존성이 없다. Ivy Bridge에서 Python 이미지와 Pydantic 등의 전이 Wheel이 실제로 실행되는지, Ubuntu 26.04에서 systemd 소켓 권한과 Compose bind mount가 동작하는지는 운영자 검증이 필요하다. 실제 VM·GPU 검증 완료로 간주하지 않는다. [uv Docker 가이드](https://docs.astral.sh/uv/guides/integration/docker/) · [FastAPI 템플릿](https://fastapi.tiangolo.com/advanced/templates/) · [HTMX 문서](https://htmx.org/docs/)
+
+2026-11-26 실제 VM 배포에서는 동일 다이제스트의 Python 3.12.16 이미지와 잠금 의존성을 Ivy Bridge 게스트에서 빌드·실행했고 포털·인증 Proxy 상태 확인을 통과했다. nginx stable-alpine 다이제스트는 `8eb04fe3b385090e9aa02961f77398ad09b6bf33ab07f6669a5bb7acce22c0d3`로 고정했다. GPU 전환·추론·VM 재부팅은 이번 포털 배포 검증에서 실행하지 않았다. [배포 기록](portal-deployment.md)

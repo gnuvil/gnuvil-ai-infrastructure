@@ -1,0 +1,33 @@
+---
+- name: Require an explicit LAN address before enabling access
+  ansible.builtin.assert:
+    that:
+      - portal_lan_address != '127.0.0.1'
+      - portal_lan_address != '0.0.0.0'
+    fail_msg: Set portal_lan_address to this VM's LAN IPv4 address.
+
+- name: Initialize root-only proxy credentials and a local TLS certificate
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - "{{ ai_project_root }}/scripts/portal-access.py"
+      - --address
+      - "{{ portal_lan_address }}"
+      - --gid
+      - "{{ portal_socket_gid | string }}"
+    creates: /etc/gnuvil-ai/portal-access.json
+  no_log: true
+
+- name: Read the existing service catalog before setting the LAN origin
+  ansible.builtin.slurp:
+    src: "{{ ai_project_root }}/configs/portal.yaml"
+  register: portal_catalog
+
+- name: Set the HTTPS origin while preserving registered services
+  ansible.builtin.copy:
+    dest: "{{ ai_project_root }}/configs/portal.yaml"
+    content: "{{ (portal_catalog.content | b64decode | from_yaml) | combine({'public_origin': 'https://' ~ portal_lan_address, 'allowed_hosts': [portal_lan_address, 'localhost', '127.0.0.1']}) | to_nice_yaml }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload and restart Gnuvil controller

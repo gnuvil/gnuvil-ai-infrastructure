@@ -2,6 +2,7 @@
 """Operate the configured GPU jobs on the local AI VM."""
 
 import argparse
+from contextlib import contextmanager
 import fcntl
 import json
 import os
@@ -13,8 +14,11 @@ import time
 
 import yaml
 
+from service_config import load_yaml, service_spec
+from service_runtime import ControlRefused, container_state, drain_services
+
 ROOT = Path(__file__).resolve().parents[1]
-DOCKER = ("docker", "--host=unix:///var/run/docker.sock")
+DOCKER = ("/usr/bin/docker", "--host=unix:///var/run/docker.sock")
 COMPOSE = (*DOCKER, "compose", "--file", str(ROOT / "compose.yaml"))
 LOCK_PATH = Path("/run/gnuvil-ai-gpu.lock")
 GPU_FIELDS = "--query-gpu=name,compute_cap,driver_version,memory.used,memory.total"
@@ -27,8 +31,10 @@ def run(command, *, capture=True, timeout=30):
 
 
 def read_policy():
-    policy = yaml.safe_load((ROOT / "configs/gpu-policy.yaml").read_text())
-    for key in ("stop_timeout_seconds", "idle_timeout_seconds", "job_timeout_seconds"):
+    policy = load_yaml(ROOT / "configs/gpu-policy.yaml")
+    for key in ("stop_timeout_seconds", "idle_timeout_seconds", "job_timeout_seconds", "ready_timeout_seconds"):
+        if key == "ready_timeout_seconds" and key not in policy:
+            continue
         if type(policy.get(key)) is not int or policy[key] <= 0:
             raise ValueError(f"{key} must be a positive integer")
     if type(policy.get("idle_memory_mib")) is not int or policy["idle_memory_mib"] < 0:
@@ -38,8 +44,11 @@ def read_policy():
     for service, mode in policy["services"].items():
         if not isinstance(service, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*", service):
             raise ValueError(f"Invalid GPU service name: {service!r}")
-        if mode not in ("job", "service"):
-            raise ValueError(f"{service}: GPU service type must be job or service")
+        service_spec(service, mode)
+    groups = [target for name, value in policy["services"].items()
+              for target in service_spec(name, value)["targets"]]
+    if len(groups) != len(set(groups)) or "portal" in groups:
+        raise ValueError("GPU groups must be disjoint and cannot control the portal")
     return policy
 
 
@@ -61,7 +70,20 @@ def validate_compose(policy, config):
     }
     if gpu_services != set(policy["services"]):
         raise ValueError("GPU Compose services must match configs/gpu-policy.yaml")
-    for name in gpu_services:
+    for name, value in policy["services"].items():
+        spec = service_spec(name, value)
+        for target in spec["targets"]:
+            if target not in services:
+                raise ValueError(f"{name}: unknown companion {target}")
+            member = services[target]
+            if member.get("stop_signal", "SIGTERM") not in {"SIGTERM", "SIGINT"}:
+                raise ValueError(f"{target}: stop_signal must be SIGTERM or SIGINT")
+            if member.get("restart") != "no" or member.get("profiles") != [name]:
+                raise ValueError(f"{target}: GPU group members need the group profile and restart: no")
+            if not member.get("image") or member.get("pull_policy") != "never":
+                raise ValueError(f"{target}: use a prebuilt local image and pull_policy: never")
+            if spec["mode"] == "service" and not member.get("healthcheck", {}).get("test"):
+                raise ValueError(f"{target}: long-running services require a healthcheck")
         service = services[name]
         if service.get("profiles") != [name] or service.get("restart") != "no":
             raise ValueError(f"{name}: set its own profile and restart: 'no'")
@@ -69,8 +91,6 @@ def validate_compose(policy, config):
             raise ValueError(f"{name}: privileged mode and deploy restart policies are forbidden")
         if not service.get("image") or service.get("pull_policy") != "never":
             raise ValueError(f"{name}: use a local image and pull_policy: never")
-        if service.get("stop_signal", "SIGTERM") not in ("SIGTERM", "SIGINT"):
-            raise ValueError(f"{name}: stop_signal must be SIGTERM or SIGINT")
 
 
 def container_ids(project, service, *, running):
@@ -108,32 +128,130 @@ def gpu_idle(memory_limit):
     return not processes and int(memory[0]) <= memory_limit
 
 
-def stop_managed_services(project, policy, confirm_stop, config):
-    active_by_service = {
-        name: container_ids(project, name, running=True)
-        for name in policy["services"]
-    }
-    active = any(active_by_service.values())
-    if active and not confirm_stop:
-        raise RuntimeError(
-            "A managed GPU container is active. Check status, drain its work, "
-            "then rerun with CONFIRM=1."
-        )
+def managed_specs(policy):
+    return [service_spec(name, value) for name, value in policy["services"].items()]
+
+
+def stop_targets(project, specs, policy, config=None):
+    targets = [target for spec in specs for target in spec["targets"]]
+    active = active_containers(project, targets)
     if active:
-        for name, containers in active_by_service.items():
+        config = config if config is not None else compose_config()
+        for target in targets:
+            containers = container_ids(project, target, running=True)
             if containers:
-                stop_signal = config["services"][name].get("stop_signal", "SIGTERM")
-                run((*DOCKER, "kill", f"--signal={stop_signal}", *containers))
+                signal = config["services"][target].get("stop_signal", "SIGTERM")
+                if signal not in {"SIGTERM", "SIGINT"}:
+                    raise RuntimeError("Unsupported stop signal")
+                run((*DOCKER, "kill", f"--signal={signal}", *containers))
         wait_until(
-            lambda: not active_containers(project, policy["services"]),
+            lambda: not active_containers(project, targets),
             policy["stop_timeout_seconds"],
-            "A managed container did not exit after its stop signal. Inspect it before retrying.",
+            "종료 시간 제한을 초과했습니다. 운영자가 상태를 확인해야 합니다.",
         )
+
+
+def stop_managed_services(project, policy, confirm_stop=False, *, safe=False):
+    specs = [spec for spec in managed_specs(policy) if active_containers(project, spec["targets"])]
+    if specs:
+        if safe:
+            safe_stop(project, specs, policy, require_gpu_idle=True)
+            return
+        elif not confirm_stop:
+            raise RuntimeError(
+                "A managed GPU container is active. Check status, drain its work, "
+                "then rerun with CONFIRM=1."
+            )
+        stop_targets(project, specs, policy)
     wait_until(
         lambda: gpu_idle(policy["idle_memory_mib"]),
         policy["idle_timeout_seconds"],
-        "GPU is still busy or above the idle VRAM threshold. Inspect nvidia-smi before retrying.",
+        "GPU 프로세스가 남아 있거나 VRAM이 회수되지 않았습니다. 전환을 중단했습니다.",
     )
+
+
+def check_images(config, spec):
+    for target in spec["targets"]:
+        try:
+            run((*DOCKER, "image", "inspect", config["services"][target]["image"]))
+        except subprocess.CalledProcessError:
+            raise RuntimeError(f"{target}: 로컬 이미지가 없습니다. 운영자가 먼저 빌드해야 합니다.") from None
+
+
+def start_service(project, spec, policy):
+    run((*COMPOSE, "up", "--detach", "--no-deps", "--no-build", "--pull", "never", *spec["targets"]))
+    def ready():
+        state = container_state(run, DOCKER, project, spec, container_ids)
+        if state["state"] == "error":
+            raise RuntimeError(state["reason"])
+        return state["state"] in {"ready", "busy"}
+    wait_until(ready, policy.get("ready_timeout_seconds", 120), "서비스 준비 시간 제한을 초과했습니다.")
+
+
+@contextmanager
+def gpu_lock():
+    with LOCK_PATH.open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ControlRefused("다른 서비스 전환이 진행 중입니다. 잠시 후 다시 시도하세요.") from None
+        yield
+
+
+def safe_stop(project, specs, policy, *, require_gpu_idle):
+    if any(spec["mode"] == "job" for spec in specs):
+        raise ControlRefused("실행 중인 일회성 작업은 웹에서 종료할 수 없습니다.")
+    for spec in specs:
+        for target in spec["targets"]:
+            active = set(container_ids(project, target, running=True))
+            regular = set(container_ids(project, target, running=False))
+            if active - regular:
+                raise ControlRefused("일회성 Compose 컨테이너가 실행 중이어서 웹 종료를 제한합니다.")
+    drain_services(specs)
+    stop_targets(project, specs, policy)
+    if require_gpu_idle:
+        wait_until(lambda: gpu_idle(policy["idle_memory_mib"]), policy["idle_timeout_seconds"],
+                   "GPU 프로세스가 남아 있거나 VRAM이 회수되지 않았습니다. 전환을 중단했습니다.")
+
+
+def control_registered_service(project, spec, policy, config, action, *, gpu_service):
+    """Targeted web stop/CPU start, using the same host lock and shutdown rules."""
+    with gpu_lock():
+        running = active_containers(project, spec["targets"])
+        if action == "stop":
+            if running:
+                safe_stop(project, [spec], policy, require_gpu_idle=gpu_service)
+        elif running:
+            if not all(container_ids(project, target, running=True) for target in spec["targets"]):
+                raise RuntimeError("서비스 일부만 실행 중입니다. 운영자가 확인해야 합니다.")
+        else:
+            check_images(config, spec)
+            start_service(project, spec, policy)
+
+
+def transition(project, service, policy, config, *, confirm_stop=False, safe=False, confirm_switch=False):
+    """One lock and lifecycle implementation for both the CLI and web controller."""
+    with gpu_lock():
+        if service:
+            spec = service_spec(service, policy["services"][service])
+            active_others = [other for other in policy["services"] if other != service
+                             and active_containers(project, service_spec(other, policy["services"][other])["targets"])]
+            target_running = active_containers(project, spec["targets"])
+            if target_running:
+                if active_others:
+                    raise RuntimeError("여러 GPU 서비스가 동시에 실행 중입니다. 운영자가 확인해야 합니다.")
+                if all(container_ids(project, target, running=True) for target in spec["targets"]):
+                    return  # Idempotent start; never restart an existing job/service.
+                raise RuntimeError("서비스 일부만 실행 중입니다. 운영자가 확인해야 합니다.")
+            if safe and active_others and not confirm_switch:
+                raise ControlRefused("다른 GPU 서비스를 종료하는 전환입니다. 상태를 새로 확인하고 전환에 동의하세요.")
+            check_images(config, spec)
+        stop_managed_services(project, policy, confirm_stop, safe=safe)
+        if service:
+            if spec["mode"] == "job":
+                run_job(project, service, policy)
+            else:
+                start_service(project, spec, policy)
 
 
 def run_job(project, service, policy):
@@ -155,29 +273,6 @@ def run_job(project, service, policy):
         "The job exited, but the GPU has not returned to its idle state.",
     )
     print(f"{service} completed successfully. The GPU is idle.")
-
-
-def run_service(project, service):
-    run((*COMPOSE, "up", "--detach", "--no-deps", "--no-build", "--pull", "never",
-         "--force-recreate", service), capture=False)
-    containers = container_ids(project, service, running=False)
-    if len(containers) != 1:
-        raise RuntimeError(f"Expected exactly one container for {service}, found {len(containers)}")
-    container = containers[0]
-
-    def ready():
-        status = run((*DOCKER, "inspect", "--format", "{{.State.Status}}", container)).strip()
-        if status != "running":
-            raise RuntimeError(f"{service} exited during startup; inspect its logs")
-        try:
-            run((*DOCKER, "exec", container, "python3", "-c",
-                 "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8188/system_stats', timeout=2).read()"))
-            return True
-        except subprocess.CalledProcessError:
-            return False
-
-    wait_until(ready, 180, f"{service} did not become ready; inspect its logs before retrying")
-    print(f"{service} is ready. Drain its queue before switching GPU services.")
 
 
 def main():
@@ -209,25 +304,9 @@ def main():
         run((*COMPOSE, "build", args.service), capture=False, timeout=None)
         return
 
-    with LOCK_PATH.open("a") as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise RuntimeError("Another GPU transition is in progress") from None
-        if args.service:
-            image = config["services"][args.service]["image"]
-            try:
-                run((*DOCKER, "image", "inspect", image))
-            except subprocess.CalledProcessError:
-                raise RuntimeError(f"Cannot inspect {image}. Run sudo make build SERVICE={args.service} first.") from None
-        stop_managed_services(project, policy, args.confirm_stop, config)
-        if args.service:
-            if policy["services"][args.service] == "job":
-                run_job(project, args.service, policy)
-            else:
-                run_service(project, args.service)
-        else:
-            print("All managed GPU services are stopped and the GPU is idle.")
+    transition(project, args.service, policy, config, confirm_stop=args.confirm_stop)
+    if not args.service:
+        print("All managed GPU services are stopped and the GPU is idle.")
 
 
 if __name__ == "__main__":

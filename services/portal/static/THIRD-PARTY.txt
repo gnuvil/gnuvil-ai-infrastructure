@@ -1,0 +1,8 @@
+HTMX 2.0.8
+Source: https://github.com/bigskysoftware/htmx/tree/v2.0.8
+File: https://raw.githubusercontent.com/bigskysoftware/htmx/v2.0.8/dist/htmx.min.js
+License: Zero-Clause BSD (HTMX-LICENSE.txt)
+
+Gnuvil logo: supplied by the club for this portal; original bitmap preserved.
+The small SVG favicon uses the portal initials AI.
+HTMX SHA-256: 22283ef68cb7545914f0a88a1bdedc7256a703d1d580c1d255217d0a50d31313

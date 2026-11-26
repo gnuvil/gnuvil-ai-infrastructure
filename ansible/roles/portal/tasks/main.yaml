@@ -1,0 +1,92 @@
+---
+- name: Verify the protected project checkout before installing a privileged controller
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - "{{ ai_project_root }}/scripts/check-controller-files.py"
+      - "{{ ai_project_root }}"
+  changed_when: false
+  check_mode: false
+
+- name: Create the dedicated portal socket group
+  ansible.builtin.group:
+    name: gnuvil-portal
+    gid: "{{ portal_socket_gid }}"
+    system: true
+    state: present
+
+- name: Create the unprivileged portal identity without Docker access
+  ansible.builtin.user:
+    name: gnuvil-portal
+    uid: 10001
+    group: gnuvil-portal
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+    groups: []
+    append: false
+
+- name: Create the stable socket directory before any portal container starts
+  ansible.builtin.file:
+    path: /run/gnuvil-ai
+    state: directory
+    owner: root
+    group: gnuvil-portal
+    mode: "0750"
+
+- name: Create the root-only portal environment directory
+  ansible.builtin.file:
+    path: /etc/gnuvil-ai
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Create a disabled-by-default proxy environment without overwriting operator secrets
+  ansible.builtin.copy:
+    dest: /etc/gnuvil-ai/portal.env
+    content: |
+      # Set a random token of at least 32 characters; the authenticated proxy injects it.
+      PORTAL_PROXY_TOKEN=
+      PORTAL_SOCKET_GID={{ portal_socket_gid }}
+    owner: root
+    group: root
+    mode: "0600"
+    force: false
+
+- name: Configure optional LAN access
+  ansible.builtin.include_tasks: lan.yaml
+  when: portal_lan_enabled | bool
+
+- name: Install the host controller systemd unit
+  ansible.builtin.template:
+    src: gnuvil-ai-controller.service.j2
+    dest: /etc/systemd/system/gnuvil-ai-controller.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload and restart Gnuvil controller
+
+- name: Create the shared GPU lock at boot with root-only write access
+  ansible.builtin.copy:
+    dest: /etc/tmpfiles.d/gnuvil-ai.conf
+    content: |
+      d /run/gnuvil-ai 0750 root gnuvil-portal -
+      f /run/gnuvil-ai-gpu.lock 0600 root root -
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Create the GPU lock without replacing an existing inode
+  ansible.builtin.command:
+    argv: [/usr/bin/systemd-tmpfiles, --create, /etc/tmpfiles.d/gnuvil-ai.conf]
+    creates: /run/gnuvil-ai-gpu.lock
+  when: not ansible_check_mode
+
+- name: Enable and start the host controller
+  ansible.builtin.systemd_service:
+    name: gnuvil-ai-controller.service
+    daemon_reload: true
+    enabled: true
+    state: started
+  when: not ansible_check_mode

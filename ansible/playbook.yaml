@@ -26,6 +26,9 @@
     - role: nvidia_container
       tags: nvidia_container
 
+    - role: portal
+      tags: portal
+
   post_tasks:
     - name: Run the optional end-to-end GPU probe
       ansible.builtin.import_role:

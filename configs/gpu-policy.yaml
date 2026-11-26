@@ -1,8 +1,11 @@
 ---
 services:
   gpu-smoke: job
-  comfyui: service
+  comfyui:
+    mode: service
+    ready_url: http://127.0.0.1:8188/system_stats
 stop_timeout_seconds: 30
 idle_timeout_seconds: 30
 job_timeout_seconds: 60
 idle_memory_mib: 64
+ready_timeout_seconds: 120

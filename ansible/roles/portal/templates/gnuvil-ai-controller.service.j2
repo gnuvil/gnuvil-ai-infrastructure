@@ -1,0 +1,36 @@
+[Unit]
+Description=Gnuvil AI Lab restricted service controller
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+Group=gnuvil-portal
+WorkingDirectory={{ ai_project_root }}
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=COMPOSE_DISABLE_ENV_FILE=1
+ExecStartPre=/usr/bin/python3 -I {{ ai_project_root }}/scripts/check-controller-files.py {{ ai_project_root }}
+ExecStart=/usr/bin/python3 {{ ai_project_root }}/scripts/service-controller.py
+RuntimeDirectory=gnuvil-ai
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
+UMask=0007
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/gnuvil-ai /run/gnuvil-ai-gpu.lock
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

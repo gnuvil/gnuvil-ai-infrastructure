@@ -2,4 +2,5 @@
 name: gnuvil-ai
 include:
   - ./services/gpu-smoke/compose.yaml
+  - ./services/portal/compose.yaml
   - ./services/comfyui/compose.yaml

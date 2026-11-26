@@ -1,0 +1,20 @@
+---
+title: Gnuvil AI Lab
+# Set the real HTTPS origin/host before exposing the portal through an authenticated proxy.
+public_origin: http://localhost:8080
+allowed_hosts: [localhost, 127.0.0.1]
+services:
+  gpu-smoke:
+    name: GPU 동작 확인
+    description: Tesla V100에서 짧은 CUDA 연산을 실행해 GPU 동작을 확인합니다.
+    category: 시스템 진단
+    icon: chip
+    url: null
+    gpu_service: gpu-smoke
+  comfyui:
+    name: ComfyUI
+    description: 노드 기반 이미지 생성 · NoobAI XL
+    category: 이미지 생성
+    icon: image
+    url: http://192.168.50.14:8188
+    gpu_service: comfyui

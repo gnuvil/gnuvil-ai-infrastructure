@@ -1,0 +1,12 @@
+*
+!services/
+!services/portal/
+!services/portal/pyproject.toml
+!services/portal/uv.lock
+!services/portal/app.py
+!services/portal/templates/
+!services/portal/templates/**
+!services/portal/static/
+!services/portal/static/**
+!scripts/
+!scripts/service_config.py

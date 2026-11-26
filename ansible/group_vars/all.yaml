@@ -35,3 +35,8 @@ docker_daemon_options:
 nvidia_container_toolkit_version: "1.20.2-1"
 # Run via --tags gpu_verify only after the local test image has been built.
 nvidia_container_smoke_service: gpu-smoke
+
+# Must match the portal Compose supplemental socket group.
+portal_socket_gid: 10001
+portal_lan_enabled: false
+portal_lan_address: 127.0.0.1

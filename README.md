@@ -1,6 +1,6 @@
 # Gnuvil AI Infrastructure
 
-Lenovo System x3500 M4의 Proxmox VE에서 실행하는 Gnuvil AI VM의 구성을 관리한다. 초기 구성은 Ubuntu Server 26.04 LTS 표준 amd64, Tesla V100 PCIe 패스스루, Docker, 영구 데이터 디렉터리, 실제 CUDA 연산을 확인하는 `gpu-smoke`를 제공한다.
+Lenovo System x3500 M4의 Proxmox VE에서 실행하는 Gnuvil AI VM의 구성을 관리한다. 초기 구성은 Ubuntu Server 26.04 LTS 표준 amd64, Tesla V100 PCIe 패스스루, Docker, 영구 데이터 디렉터리, 실제 CUDA 연산을 확인하는 `gpu-smoke`와 경량 서비스 포털 **Gnuvil AI Lab**을 제공한다.
 
 ## 구성
 
@@ -11,6 +11,8 @@ Lenovo System x3500 M4의 Proxmox VE에서 실행하는 Gnuvil AI VM의 구성�
 | `compose.yaml`, `services/gpu-smoke/` | Compose 모듈과 Volta용 CUDA 검증 이미지 |
 | `configs/gpu-policy.yaml`, `scripts/gpu-switch.py` | GPU 서비스 정책, 전환 및 상태 관리 |
 | `scripts/validate.py`, `Makefile` | 정적 검사와 운영 명령 |
+| `services/portal/`, `configs/portal.yaml` | FastAPI·Jinja2·HTMX 대시보드와 선언적 서비스 목록 |
+| `scripts/service-controller.py`, `ansible/roles/portal/` | 제한된 호스트 제어 API와 systemd·소켓 권한 |
 
 ## 정적 검증
 
@@ -31,14 +33,30 @@ VM의 사전 조건, 스토리지 선택과 재부팅 절차는 [설치 및 검�
 | `sudo make gpu-off` | 관리 대상 컨테이너 종료와 GPU 유휴 상태 확인 |
 | `sudo make status` | VM에서 Compose 컨테이너, GPU, VRAM, 연산 프로세스 조회 |
 
-실행 중인 컨테이너가 있으면 먼저 작업을 확인하고 완료를 기다린다. 정지해도 되는 작업에 한해 `switch` 또는 `gpu-off`에 `CONFIRM=1`을 추가한다. 기본 Compose Profile에서 활성화되는 서비스는 0개이며, `gpu-smoke`는 명령이 끝나면 GPU를 반환한다.
+실행 중인 컨테이너가 있으면 먼저 작업을 확인하고 완료를 기다린다. 정지해도 되는 작업에 한해 `switch` 또는 `gpu-off`에 `CONFIRM=1`을 추가한다. 기본 Compose Profile에는 CPU 포털만 포함되며 GPU 서비스는 자동 실행되지 않는다. `gpu-smoke`는 명령이 끝나면 GPU를 반환한다.
+
+## Gnuvil AI Lab
+
+동아리 로고를 사용하는 한국어 대시보드에서 서비스·GPU·CPU·RAM 상태를 확인하고 등록 서비스를 제어한다. 자체 계정 DB는 없으며 인증된 Reverse Proxy가 접근을 제한한다. 초기 토큰은 비어 있어 인증 경로를 설정하기 전에는 화면·제어 요청이 거부된다. Docker 소켓은 웹 컨테이너에 연결하지 않는다. 현재 등록 서비스는 GPU 진단용 `gpu-smoke`와 기존 VM에서 사용하던 ComfyUI다. ComfyUI에는 안전한 drain adapter가 없어 웹 종료·전환을 제한하고 기존 CLI 운영을 유지한다.
+
+개발 머신의 일반 사용자 권한으로 다음을 실행한다. Docker 데몬이나 GPU는 필요 없다.
+
+```bash
+uv sync --project services/portal --locked
+make validate test PYTHON=services/portal/.venv/bin/python
+```
+
+AI VM 운영 명령은 `sudo make portal-build`, `portal-up`, `portal-down`, `portal-logs`다. 실제 실행 전에 [포털 설치·인증·서비스 등록·장애 대응](docs/portal.md)을 따른다.
+
+실제 AI VM 배포 주소와 인증서·공용 암호 조회, 운영 명령은 [배포 기록](docs/portal-deployment.md)에 있다.
 
 ## 운영 문서
 
+- [포털 설치 및 인수인계](docs/portal.md)
 - [아키텍처와 GPU 운영 정책](docs/architecture.md)
 - [설치 및 실제 VM 검증](docs/installation.md)
 - [하드웨어 호환성 및 버전 근거](docs/compatibility.md)
 - [재구축 및 백업 복구](docs/recovery.md)
 - [ComfyUI와 NoobAI XL V-Pred 설치 및 사용](services/comfyui/README.md)
 
-ComfyUI와 NoobAI 모델 매니페스트가 추가되어 있다. 새 VM에서는 구성과 재부팅, CUDA 테스트 및 서비스별 검증을 수행하고 기준 버전을 기록한다. llama.cpp, RVC, 음원 분리, Whisper, CPU 기반 Open WebUI는 향후 개별 서비스로 추가할 수 있다.
+ComfyUI와 NoobAI 모델 매니페스트는 기존 VM의 운영 구성을 보존해 포함했다. 새 VM에서는 구성과 재부팅, CUDA 테스트 및 서비스별 검증을 수행하고 기준 버전을 기록한다. llama.cpp, RVC, 음원 분리, Whisper, CPU 기반 Open WebUI는 향후 개별 서비스로 추가할 수 있다.
