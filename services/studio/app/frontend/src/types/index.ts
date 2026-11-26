@@ -35,6 +35,8 @@ export interface IPAdapterGenerateParams extends HiresFixParams {
 
 export interface GenerateParams extends HiresFixParams {
   prompt: string
+  /** The prefix already at the start of `prompt`; tells the server not to add its own quality preset. */
+  prompt_prefix?: string
   negative_prompt: string
   checkpoint: string
   seed?: number

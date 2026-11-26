@@ -755,6 +755,7 @@ function App() {
       } else {
         const res = await generateImage({
           prompt: fullPrompt,
+          prompt_prefix: promptPrefix.trim(),
           negative_prompt: effNegative,
           checkpoint,
           seed: seed ? Number(seed) : undefined,
