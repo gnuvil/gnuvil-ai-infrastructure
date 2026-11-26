@@ -2,7 +2,7 @@
 
 동아리원이 브라우저에서 서비스를 시작하고 기존 AI 웹 화면에 접속하는 공통 진입점이다. 자체 회원가입, 사용자 DB, 관리자 웹 화면은 없다. 개별 AI 서비스의 인증과 사용자 데이터 격리는 별도다.
 
-초기 구현 이후 실제 VM을 조사해 기존 ComfyUI 구성·모델 매니페스트를 보존했다. 현재 포털에는 `gpu-smoke`와 ComfyUI를 표시한다. ComfyUI는 기존 준비 상태 API로 접속 가능 여부를 확인하지만 drain adapter가 없어 웹 종료·전환은 거부한다. 기존 실행 컨테이너를 재생성하지 않고 준비 상태를 확인하기 위해 정책의 선택적 `ready_url`을 사용한다. 향후 새 컨테이너에는 Compose Health Check도 적용된다.
+초기 구현 이후 실제 VM을 조사해 기존 ComfyUI 구성·모델 매니페스트를 보존했다. 현재 포털에는 `gpu-smoke`와 ComfyUI를 표시한다. ComfyUI는 Health Check 또는 `ready_url`로 준비 상태를 확인하고, 전용 Unix 소켓으로 실행·대기 작업과 안전한 종료 가능 여부를 확인한다.
 
 실제 VM의 LAN 공용 암호·TLS 배포는 [배포 기록](portal-deployment.md)을 따른다. `portal_lan_enabled=true`, `portal_lan_address`로 선택적으로 활성화한다.
 
@@ -144,7 +144,7 @@ cpu_service:
 
 컨테이너 `running`은 준비 완료가 아니다. 그룹 전체 Docker Health Check가 `healthy`이거나, 모두 실행 중이고 등록된 호스트 loopback `ready_url`이 HTTP 200을 반환해야 접속할 수 있다. 명시적으로 unhealthy인 컨테이너는 ready_url로 우회하지 않는다. ready_url은 작업 상태나 종료 안전성을 보장하지 않는다. 등록된 작업 상태 API가 있으면 그 API의 `ready`도 확인한다. GPU 사용률로 작업 유무를 추측하지 않는다.
 
-`probe_url`은 호스트 loopback HTTP의 고정 포트만 허용하며 redirect·외부 Proxy는 사용하지 않는다. 해당 포트의 adapter는 서비스별로 구현·검증해야 한다. 기존 AI 서비스 API가 아래 계약과 다르면 URL만 등록해서 사용할 수 없다. **이번 변경에는 아직 존재하지 않는 AI 서비스용 adapter를 만들지 않았다.**
+`probe_socket`은 `/run/gnuvil-<service>/lifecycle.sock`의 전용 Unix 소켓을 사용한다. 기존 `probe_url`은 호스트 loopback HTTP만 허용하며 redirect·외부 Proxy는 사용하지 않는다. 두 설정은 동시에 사용할 수 없다. 각 서비스는 아래 상태·종료 계약을 구현해야 한다.
 
 | API | 필수 동작 |
 | --- | --- |
@@ -185,7 +185,17 @@ Controller는 root로 Docker를 제어하므로 실질적으로 높은 권한을
 
 작업·오류는 메모리에만 보관한다. Controller 재시작 시 과거 오류·접수 기록은 사라지며 Docker 상태·Health Check·작업 상태를 다시 수집한다. 실패한 작업은 journald의 서비스 ID·action·오류 종류를 확인하고 필요하면 `docker compose ... ps` 등 기존 CLI로 조사한다. 웹에는 subprocess stderr, 경로, 자격 증명을 반환하지 않는다.
 
-예약·사용자별 할당·자동 유휴 종료·추론 게이트웨이·모델 관리·장기 통계는 초기 범위에 포함하지 않는다.
+## 유휴 서비스 자동 종료
+
+자동 종료는 서비스별 선택 설정이다. 4시간을 적용하려면 이미 `probe_socket` 또는 `probe_url`을 제공하는 장기 실행 GPU 서비스의 `configs/gpu-policy.yaml` 항목에 `idle_shutdown_seconds: 14400`을 추가한다. CPU 서비스는 `configs/portal.yaml`의 해당 `cpu_service` 항목에 같은 값을 추가한다. Controller가 읽는 설정이며, 항목을 생략하면 자동 종료하지 않는다. `idle_timeout_seconds`는 기존 전환 시 GPU 반환 대기 시간이다.
+
+- `GET /state`는 `idle_seconds`를 추가로 제공해야 한다. 서비스가 준비된 이후 실행 중인 작업과 대기 작업이 연속으로 없었던 시간을 초 단위의 0 이상 정수로 반환한다. 작업이 들어오면 카운터를 초기화하고, 마지막 작업이 완료되거나 취소되어 큐가 비었을 때부터 다시 센다. 서비스에서 직접 추적하므로 폴링 사이에 끝난 작업도 반영해야 한다.
+- `POST /drain`에 `{"min_idle_seconds": 14400}`이 들어오면 새 요청을 받는 코드와 동기화하여 같은 조건을 확인한다. 충족한 경우에만 신규 작업을 차단하고 `drained: true`와 당시의 `idle_seconds`를 반환한다. 수동 종료의 빈 요청 `{}`도 계속 지원한다. 조건이 바뀌거나 확인에 실패하면 Controller는 기존 `/resume` 절차를 사용해 차단을 풀고 종료 신호는 보내지 않는다.
+- Controller는 기존 상태 수집에서 준비 완료·작업 없음·유휴 기준 충족을 확인한 뒤 기존 GPU 파일 잠금을 사용하는 종료 작업을 요청한다. 실제 종료 직전에는 `/drain`의 응답을 다시 검증한다. 다른 제어가 진행 중이면 다음 상태 수집에서 다시 판단한다. 일회성 작업에는 설정할 수 없다.
+
+ComfyUI의 `GET /queue`는 실행·대기 목록을, `GET /prompt`의 `exec_info.queue_remaining`은 두 작업 수의 합계를 반환한다. 이 응답으로 현재 작업 유무를 표시할 수 있다. ComfyUI의 전용 확장은 큐 변경을 기록하고 종료 직전 작업 접수를 차단한다. 자동 종료 기준은 운영 정책에서 별도로 선택한다. [ComfyUI 서버 API](https://docs.comfy.org/development/comfyui-server/comms_routes)
+
+예약·사용자별 할당·추론 게이트웨이·모델 관리·장기 통계는 초기 범위에 포함하지 않는다.
 
 ## 이번 변경의 로컬 검증 기록 — 2026-11-26
 

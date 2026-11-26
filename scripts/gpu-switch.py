@@ -198,7 +198,7 @@ def gpu_lock():
         yield
 
 
-def safe_stop(project, specs, policy, *, require_gpu_idle):
+def safe_stop(project, specs, policy, *, require_gpu_idle, min_idle_seconds=None):
     if any(spec["mode"] == "job" for spec in specs):
         raise ControlRefused("실행 중인 일회성 작업은 웹에서 종료할 수 없습니다.")
     for spec in specs:
@@ -207,20 +207,27 @@ def safe_stop(project, specs, policy, *, require_gpu_idle):
             regular = set(container_ids(project, target, running=False))
             if active - regular:
                 raise ControlRefused("일회성 Compose 컨테이너가 실행 중이어서 웹 종료를 제한합니다.")
-    drain_services(specs)
+            if min_idle_seconds is not None and not active:
+                raise ControlRefused("서비스 전체가 실행 중인지 확인할 수 없어 자동 종료하지 않았습니다.")
+    if min_idle_seconds is None:
+        drain_services(specs)
+    else:
+        drain_services(specs, min_idle_seconds=min_idle_seconds)
     stop_targets(project, specs, policy)
     if require_gpu_idle:
         wait_until(lambda: gpu_idle(policy["idle_memory_mib"]), policy["idle_timeout_seconds"],
                    "GPU 프로세스가 남아 있거나 VRAM이 회수되지 않았습니다. 전환을 중단했습니다.")
 
 
-def control_registered_service(project, spec, policy, config, action, *, gpu_service):
+def control_registered_service(project, spec, policy, config, action, *, gpu_service, min_idle_seconds=None):
     """Targeted web stop/CPU start, using the same host lock and shutdown rules."""
     with gpu_lock():
         running = active_containers(project, spec["targets"])
         if action == "stop":
             if running:
-                safe_stop(project, [spec], policy, require_gpu_idle=gpu_service)
+                safe_stop(project, [spec], policy, require_gpu_idle=gpu_service, min_idle_seconds=min_idle_seconds)
+                return True
+            return False
         elif running:
             if not all(container_ids(project, target, running=True) for target in spec["targets"]):
                 raise RuntimeError("서비스 일부만 실행 중입니다. 운영자가 확인해야 합니다.")

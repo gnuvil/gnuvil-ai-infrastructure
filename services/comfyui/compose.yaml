@@ -14,6 +14,13 @@ services:
       - "127.0.0.1:8188:8188"
       - "192.168.50.14:8188:8188"
     volumes:
+      - ./entrypoint.sh:/usr/local/bin/gnuvil-comfyui:ro
+      - ./gnuvil_lifecycle:/opt/ComfyUI/custom_nodes/gnuvil_lifecycle:ro
+      - type: bind
+        source: /run/gnuvil-comfyui
+        target: /run/gnuvil-comfyui
+        bind:
+          create_host_path: false
       - /srv/ai-data/models/comfyui/checkpoints:/opt/ComfyUI/models/checkpoints:ro
       - /srv/ai-data/outputs/comfyui:/data/output
       - /srv/ai-data/state/comfyui/input:/data/input

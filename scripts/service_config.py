@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 import yaml
 
 IDENTIFIER = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,63}\Z")
+PROBE_SOCKET = re.compile(r"/run/gnuvil-[a-z0-9-]+/lifecycle\.sock\Z")
 
 
 class UniqueKeyLoader(yaml.SafeLoader):
@@ -36,7 +37,8 @@ def service_spec(name, value):
     """Preserve the original `gpu-smoke: job` policy shorthand."""
     if isinstance(value, str):
         value = {"mode": value}
-    if not isinstance(value, dict) or set(value) - {"mode", "companions", "probe_url", "ready_url"}:
+    fields = {"mode", "companions", "probe_url", "probe_socket", "ready_url", "idle_shutdown_seconds"}
+    if not isinstance(value, dict) or set(value) - fields:
         raise ValueError(f"{name}: invalid service policy")
     mode = value.get("mode")
     companions = value.get("companions", [])
@@ -55,6 +57,12 @@ def service_spec(name, value):
                 or parts.path not in {"", "/"}):
             raise ValueError(f"{name}: probe_url must be http://127.0.0.1:<port>")
         probe_url = probe_url.rstrip("/")
+    probe_socket = value.get("probe_socket")
+    if probe_socket is not None:
+        if not isinstance(probe_socket, str) or len(probe_socket) > 103 or not PROBE_SOCKET.fullmatch(probe_socket):
+            raise ValueError(f"{name}: probe_socket must use /run/gnuvil-<service>/lifecycle.sock")
+        if probe_url:
+            raise ValueError(f"{name}: configure only one lifecycle probe")
     ready_url = value.get("ready_url")
     if ready_url is not None:
         if not isinstance(ready_url, str):
@@ -63,9 +71,16 @@ def service_spec(name, value):
         if (parts.scheme != "http" or parts.hostname != "127.0.0.1" or not parts.port
                 or parts.username or parts.password or parts.query or parts.fragment):
             raise ValueError(f"{name}: ready_url must use a loopback HTTP port")
-    if mode == "job" and (companions or probe_url or ready_url):
+    if mode == "job" and (companions or probe_url or probe_socket or ready_url):
         raise ValueError(f"{name}: jobs cannot have companions or a drain probe")
-    return {"mode": mode, "targets": targets, "probe_url": probe_url, "ready_url": ready_url}
+    idle_shutdown = value.get("idle_shutdown_seconds")
+    if "idle_shutdown_seconds" in value:
+        if type(idle_shutdown) is not int or idle_shutdown <= 0:
+            raise ValueError(f"{name}: idle_shutdown_seconds must be a positive integer")
+        if mode != "service" or not (probe_url or probe_socket):
+            raise ValueError(f"{name}: idle shutdown requires a long-running service and a drain probe")
+    return {"mode": mode, "targets": targets, "probe_url": probe_url, "probe_socket": probe_socket, "ready_url": ready_url,
+            "idle_shutdown_seconds": idle_shutdown}
 
 
 def validate_portal(portal, policy=None, compose=None):
@@ -112,7 +127,8 @@ def validate_portal(portal, policy=None, compose=None):
             spec = service_spec(name, policy["services"][name]) if policy else None
         else:
             cpu = service["cpu_service"]
-            if not isinstance(cpu, dict) or set(cpu) - {"service", "companions", "probe_url", "ready_url"}:
+            fields = {"service", "companions", "probe_url", "probe_socket", "ready_url", "idle_shutdown_seconds"}
+            if not isinstance(cpu, dict) or set(cpu) - fields:
                 raise ValueError(f"{key}: invalid CPU service")
             name = cpu.get("service")
             spec = service_spec(name, {"mode": "service", **{k: v for k, v in cpu.items() if k != "service"}})

@@ -31,6 +31,7 @@ def module(name, path):
 
 gpu = module("gpu_test", ROOT / "scripts/gpu-switch.py")
 controller_module = module("controller_test", ROOT / "scripts/service-controller.py")
+comfy_lifecycle = module("comfy_lifecycle", ROOT / "services/comfyui/gnuvil_lifecycle/lifecycle.py")
 with patch.dict("os.environ", {"PORTAL_PROXY_TOKEN": "a" * 48}):
     web = module("portal_test", ROOT / "services/portal/app.py")
 from fastapi.testclient import TestClient
@@ -91,6 +92,53 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             gpu.validate_compose(self.policy, {"services": {}})
 
+    def test_idle_shutdown_requires_a_positive_timeout_and_lifecycle_probe(self):
+        for value in (0, -1, True, "14400", None):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                service_spec("chat", {"mode": "service", "probe_url": "http://127.0.0.1:9001",
+                                      "idle_shutdown_seconds": value})
+        for mode in ("job", "service"):
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                service_spec("chat", {"mode": mode, "idle_shutdown_seconds": 14400})
+
+
+class ComfyLifecycleTests(unittest.TestCase):
+    def setUp(self):
+        self.server = Mock()
+        self.queue = self.server.prompt_queue
+        self.queue.mutex = threading.RLock()
+        self.queue.get_tasks_remaining.return_value = 0
+        self.lifecycle = comfy_lifecycle.QueueLifecycle(self.server)
+
+    def test_pending_or_running_work_prevents_drain_and_submission_remains_open(self):
+        self.queue.get_tasks_remaining.return_value = 1
+        state = self.lifecycle.state(action="drain")
+        self.assertTrue(state["busy"])
+        self.assertFalse(state["drained"])
+        self.lifecycle.put("next")
+        self.queue.put.assert_called_once_with("next")
+
+    def test_empty_queue_drain_blocks_submissions_until_resumed(self):
+        state = self.lifecycle.state(action="drain")
+        self.assertTrue(state["drained"])
+        with self.assertRaises(comfy_lifecycle.WorkAdmissionClosed):
+            self.lifecycle.put("must not be accepted")
+        self.queue.put.assert_not_called()
+        self.lifecycle.state(action="resume")
+        self.lifecycle.put("accepted again")
+        self.queue.put.assert_called_once_with("accepted again")
+
+    def test_short_job_between_samples_resets_idle_time(self):
+        with patch.object(comfy_lifecycle.time, "monotonic", side_effect=[0, 500, 501, 502]):
+            self.lifecycle.state()
+            self.queue.get_tasks_remaining.return_value = 1
+            self.lifecycle.queue_updated()
+            self.queue.get_tasks_remaining.return_value = 0
+            self.lifecycle.queue_updated()
+            state = self.lifecycle.state(action="drain", minimum_idle=400)
+        self.assertEqual(state["idle_seconds"], 1)
+        self.assertFalse(state["drained"])
+
 
 class LifecycleTests(unittest.TestCase):
     def setUp(self):
@@ -104,10 +152,22 @@ class LifecycleTests(unittest.TestCase):
                 self.assertEqual(probe.call_args_list[-1].args[1], "resume")
 
     def test_probe_failure_resumes_every_attempted_service(self):
-        with patch.object(runtime, "probe", side_effect=[{"busy": False, "drained": True}, TimeoutError(), {}, {}]) as probe:
+        with patch.object(runtime, "probe", side_effect=[{"ready": True, "busy": False, "drained": True}, TimeoutError(), {}, {}]) as probe:
             with self.assertRaises(TimeoutError):
                 runtime.drain_services([self.spec, self.spec])
             self.assertEqual([call.args[1] for call in probe.call_args_list], ["drain", "drain", "resume", "resume"])
+
+    def test_idle_shutdown_rechecks_activity_after_draining(self):
+        for idle_seconds in (None, True, 0, 14399, 14400):
+            work = {"ready": True, "busy": False, "drained": True, "idle_seconds": idle_seconds}
+            with self.subTest(idle_seconds=idle_seconds), patch.object(runtime, "probe", return_value=work) as probe:
+                if idle_seconds == 14400:
+                    runtime.drain_services([self.spec], min_idle_seconds=14400)
+                    probe.assert_called_once_with(self.spec, "drain", min_idle_seconds=14400)
+                else:
+                    with self.assertRaises(runtime.ControlRefused):
+                        runtime.drain_services([self.spec], min_idle_seconds=14400)
+                    probe.assert_called_with(self.spec, "resume")
 
     def test_missing_probe_denies_safe_shutdown(self):
         with self.assertRaises(RuntimeError):
@@ -285,9 +345,32 @@ class ControllerTests(unittest.TestCase):
         self.addCleanup(self.controller.worker.shutdown)
 
     def test_unknown_service_arbitrary_action_and_bad_confirmation_rejected(self):
-        for key, action, confirm in (("../../etc/passwd", "start", False), ("gpu-smoke", "exec", False), ("gpu-smoke", "start", "yes")):
+        for key, action, confirm in (("../../etc/passwd", "start", False), ("gpu-smoke", "exec", False),
+                                     ("gpu-smoke", "idle-stop", False), ("gpu-smoke", "start", "yes")):
             with self.assertRaises(ValueError):
                 self.controller.submit(key, action, confirm)
+
+    def test_idle_shutdown_schedules_only_an_opted_in_ready_service_at_threshold(self):
+        self.assertNotIn("gpu-smoke", self.controller.idle_shutdowns)
+        self.controller.idle_shutdowns = {"comfyui": 14400}
+        ready = {"state": "ready", "can_stop": True, "idle_seconds": 14400}
+        states = {"comfyui": ready, "gpu-smoke": ready}
+        with patch.object(self.controller, "queue_operation", return_value={"ok": True}) as queue:
+            for state in ({**ready, "state": "busy"}, {**ready, "can_stop": False},
+                          {**ready, "idle_seconds": 14399}, {**ready, "idle_seconds": None}):
+                self.controller.schedule_idle_shutdown({**states, "comfyui": state})
+            queue.assert_not_called()
+            self.controller.schedule_idle_shutdown(states)
+            self.controller.schedule_idle_shutdown(states)
+            queue.assert_called_once_with("comfyui", controller_module.IDLE_STOP, False)
+
+    def test_automatic_shutdown_uses_the_shared_stop_path_with_the_idle_threshold(self):
+        self.controller.idle_shutdowns = {"comfyui": 14400}
+        with patch.object(controller_module.gpu, "control_registered_service", return_value=True) as stop:
+            self.controller.operation_lock.acquire()
+            self.controller.execute("comfyui", controller_module.IDLE_STOP, False)
+        self.assertEqual(stop.call_args.args[-1], "stop")
+        self.assertEqual(stop.call_args.kwargs, {"gpu_service": True, "min_idle_seconds": 14400})
 
     def test_long_operation_does_not_block_snapshot_or_queue_more_work(self):
         entered, release = threading.Event(), threading.Event()
@@ -343,7 +426,7 @@ class ControllerTests(unittest.TestCase):
         self.controller.cache_time = time.monotonic()
         state = self.controller.snapshot()["services"]["gpu-smoke"]
         self.assertFalse(state["can_start"])
-        self.assertIn("안전한 종료", state["start_reason"])
+        self.assertIn("작업 상태", state["start_reason"])
 
     def test_safety_refusal_does_not_change_container_state_to_error(self):
         self.controller.cache = {"services": {key: {"state": "stopped", "reason": "", "can_stop": False}
@@ -538,6 +621,15 @@ class WebTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("안전한 종료", response.text)
         self.assertTrue(all(call.args[0]["action"] == "snapshot" for call in self.request.call_args_list))
+
+    def test_spinner_renders_only_while_starting_or_stopping(self):
+        for state in ("starting", "stopping", "ready", "stopped", "busy"):
+            with self.subTest(state=state):
+                self.data["services"]["gpu-smoke"]["state"] = state
+                web._cache_until = 0
+                response = self.client.get("/status", headers=self.headers)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual('class="status-spinner"' in response.text, state in {"starting", "stopping"})
 
     def test_dashboard_polling_is_cached_across_requests(self):
         for _ in range(3):

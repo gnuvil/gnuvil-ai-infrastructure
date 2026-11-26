@@ -4,6 +4,7 @@ services:
   comfyui:
     mode: service
     ready_url: http://127.0.0.1:8188/system_stats
+    probe_socket: /run/gnuvil-comfyui/lifecycle.sock
   llamacpp:
     mode: service
     ready_url: http://127.0.0.1:8081/health

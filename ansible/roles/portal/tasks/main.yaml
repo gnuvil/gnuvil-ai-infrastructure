@@ -67,11 +67,20 @@
     mode: "0644"
   notify: Reload and restart Gnuvil controller
 
-- name: Create the shared GPU lock at boot with root-only write access
+- name: Create the ComfyUI lifecycle directory
+  ansible.builtin.file:
+    path: /run/gnuvil-comfyui
+    state: directory
+    owner: "1000"
+    group: "1000"
+    mode: "0700"
+
+- name: Create lifecycle directories and the shared GPU lock at boot
   ansible.builtin.copy:
     dest: /etc/tmpfiles.d/gnuvil-ai.conf
     content: |
       d /run/gnuvil-ai 0750 root gnuvil-portal -
+      d /run/gnuvil-comfyui 0700 1000 1000 -
       f /run/gnuvil-ai-gpu.lock 0600 root root -
     owner: root
     group: root

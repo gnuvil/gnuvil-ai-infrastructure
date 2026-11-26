@@ -17,13 +17,15 @@ import threading
 import time
 
 from service_config import load_yaml, portal_spec, validate_portal
-from service_runtime import ControlRefused, container_state
+from service_runtime import ControlRefused, container_state, idle_for
 
 ROOT = Path(__file__).resolve().parents[1]
 module_spec = importlib.util.spec_from_file_location("gpu_switch", ROOT / "scripts/gpu-switch.py")
 gpu = importlib.util.module_from_spec(module_spec)
 module_spec.loader.exec_module(gpu)
 LOG = logging.getLogger("gnuvil.controller")
+IDLE_STOP = "idle-stop"
+IDLE_RETRY_SECONDS = 60
 
 
 def system_metrics(previous_cpu=None):
@@ -65,6 +67,12 @@ class Controller:
         self.compose = gpu.compose_config()
         gpu.validate_compose(self.policy, self.compose)
         self.portal = validate_portal(load_yaml(ROOT / "configs/portal.yaml"), self.policy, self.compose)
+        self.idle_shutdowns = {}
+        for key, service in self.portal["services"].items():
+            spec = portal_spec(service, self.policy)
+            if spec["idle_shutdown_seconds"] is not None:
+                self.idle_shutdowns[key] = spec["idle_shutdown_seconds"]
+        self.idle_retry_at = {}
         self.project = self.compose["name"]
         self.worker = ThreadPoolExecutor(max_workers=1, thread_name_prefix="service-control")
         self.operation_lock = threading.Lock()
@@ -99,6 +107,20 @@ class Controller:
             self.cache = {"services": states, "metrics": metrics, "active_gpu": active_gpu,
                           "collected_at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
             self.cache_time = time.monotonic()
+        self.schedule_idle_shutdown(states)
+
+    def schedule_idle_shutdown(self, states):
+        for key, seconds in self.idle_shutdowns.items():
+            state = states[key]
+            if state["state"] != "ready" or not state["can_stop"] or not idle_for(state, seconds):
+                continue
+            now = time.monotonic()
+            if now < self.idle_retry_at.get(key, 0):
+                continue
+            result = self.queue_operation(key, IDLE_STOP, False)
+            if result["ok"]:
+                self.idle_retry_at[key] = now + IDLE_RETRY_SECONDS
+                break
 
     def sample(self):
         while not self.sampler_stop.is_set():
@@ -123,7 +145,7 @@ class Controller:
             spec = portal_spec({"gpu_service": other}, self.policy)
             if spec["mode"] == "job":
                 return f"{label} 작업이 실행 중이어서 전환할 수 없습니다."
-            if not spec.get("probe_url"):
+            if not (spec.get("probe_url") or spec.get("probe_socket")):
                 return f"{label}의 안전한 종료를 확인할 수 없어 전환할 수 없습니다."
             other_state = next((states[other_key] for other_key, value in self.portal["services"].items()
                                 if value.get("gpu_service") == other), {})
@@ -149,8 +171,9 @@ class Controller:
                 states[key]["can_stop"] = False
             if self.operation:
                 key, action = self.operation
-                phase = "stopping" if action == "stop" else "starting"
-                if action != "stop" and portal_spec(self.portal["services"][key], self.policy)["mode"] == "job" and states[key]["state"] == "busy":
+                stopping = action in {"stop", IDLE_STOP}
+                phase = "stopping" if stopping else "starting"
+                if not stopping and portal_spec(self.portal["services"][key], self.policy)["mode"] == "job" and states[key]["state"] == "busy":
                     phase = "busy"
                 states[key].update(state=phase, can_stop=False,
                                    reason="일회성 작업이 실행 중입니다. 완료될 때까지 기다려 주세요." if phase == "busy" else "요청을 처리하고 있습니다. 잠시 기다려 주세요.")
@@ -166,6 +189,9 @@ class Controller:
     def submit(self, key, action, confirm):
         if key not in self.portal["services"] or action not in {"start", "stop", "switch"} or type(confirm) is not bool:
             raise ValueError("등록되지 않은 서비스 또는 허용되지 않은 요청입니다.")
+        return self.queue_operation(key, action, confirm)
+
+    def queue_operation(self, key, action, confirm):
         if not self.operation_lock.acquire(blocking=False):
             with self.state_lock:
                 if self.operation == (key, action):
@@ -182,15 +208,25 @@ class Controller:
         try:
             service = self.portal["services"][key]
             spec = portal_spec(service, self.policy)
-            if "gpu_service" in service and action != "stop":
+            gpu_service = "gpu_service" in service
+            if action == IDLE_STOP:
+                seconds = self.idle_shutdowns[key]
+                stopped = gpu.control_registered_service(self.project, spec, self.policy, self.compose, "stop",
+                                                          gpu_service=gpu_service, min_idle_seconds=seconds)
+                if stopped:
+                    with self.state_lock:
+                        self.notice = (f"{service['name']} 서비스가 유휴 시간 기준에 따라 종료되었습니다.", time.monotonic())
+                    LOG.info("idle shutdown completed: service=%s threshold_seconds=%d", key, seconds)
+            elif gpu_service and action != "stop":
                 gpu.transition(self.project, service["gpu_service"], self.policy, self.compose,
                                safe=True, confirm_switch=confirm)
             else:
                 gpu.control_registered_service(self.project, spec, self.policy, self.compose, action,
-                                               gpu_service="gpu_service" in service)
+                                               gpu_service=gpu_service)
         except ControlRefused as error:
-            with self.state_lock:
-                self.notice = (str(error), time.monotonic())
+            if action != IDLE_STOP:
+                with self.state_lock:
+                    self.notice = (str(error), time.monotonic())
             LOG.info("operation refused: service=%s action=%s", key, action)
         except Exception as error:
             # Never serialize subprocess stderr, paths or probe bodies to a browser.

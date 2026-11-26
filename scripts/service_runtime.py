@@ -4,7 +4,9 @@ A probe must atomically block new work before acknowledging POST /drain.
 No probe means work state is unknown and web shutdown is refused.
 """
 
+import http.client
 import json
+import socket
 import urllib.request
 
 
@@ -20,17 +22,40 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 PROBE_HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
 
-def probe(spec, action="state"):
-    if not spec.get("probe_url"):
+class UnixHTTPConnection(http.client.HTTPConnection):
+    def __init__(self, path):
+        super().__init__("localhost", timeout=3)
+        self.path = path
+
+    def connect(self):
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        self.sock.connect(self.path)
+
+
+def probe(spec, action="state", *, min_idle_seconds=None):
+    if not (spec.get("probe_url") or spec.get("probe_socket")):
         raise ControlRefused("작업 상태와 안전한 종료 방법이 등록되지 않았습니다. 운영자에게 문의하세요.")
-    request = urllib.request.Request(
-        f"{spec['probe_url']}/{action}",
-        data=b"{}" if action != "state" else None,
-        headers={"Content-Type": "application/json"},
-        method="GET" if action == "state" else "POST",
-    )
-    with PROBE_HTTP.open(request, timeout=3) as response:
-        payload = response.read(4097)
+    request_body = {} if min_idle_seconds is None else {"min_idle_seconds": min_idle_seconds}
+    body = None if action == "state" else json.dumps(request_body).encode()
+    method = "GET" if action == "state" else "POST"
+    headers = {"Content-Type": "application/json"}
+    if spec.get("probe_socket"):
+        connection = UnixHTTPConnection(spec["probe_socket"])
+        try:
+            connection.request(method, f"/{action}", body, headers)
+            with connection.getresponse() as response:
+                if response.status != 200:
+                    raise ControlRefused("서비스의 작업 상태를 확인할 수 없습니다.")
+                payload = response.read(4097)
+        except (OSError, http.client.HTTPException) as error:
+            raise ControlRefused("서비스의 작업 상태를 확인할 수 없습니다.") from error
+        finally:
+            connection.close()
+    else:
+        request = urllib.request.Request(f"{spec['probe_url']}/{action}", body, headers, method=method)
+        with PROBE_HTTP.open(request, timeout=3) as response:
+            payload = response.read(4097)
     if len(payload) > 4096:
         raise RuntimeError("Lifecycle probe response is too large")
     state = json.loads(payload)
@@ -39,21 +64,33 @@ def probe(spec, action="state"):
     return state
 
 
-def drain_services(specs):
+def idle_for(state, seconds):
+    idle_seconds = state.get("idle_seconds")
+    return type(idle_seconds) is int and idle_seconds >= seconds
+
+
+def drain_services(specs, *, min_idle_seconds=None):
     """All-or-nothing preparation. Resume even a failed probe: its POST may have arrived."""
     attempted = []
     try:
         for spec in specs:
             attempted.append(spec)
-            state = probe(spec, "drain")
-            if state["busy"] or not state["drained"]:
+            if min_idle_seconds is None:
+                state = probe(spec, "drain")
+            else:
+                state = probe(spec, "drain", min_idle_seconds=min_idle_seconds)
+            if state["busy"] or not state["drained"] or not state["ready"]:
                 raise ControlRefused("진행 중인 작업이 있거나 신규 작업 차단을 확인할 수 없어 종료하지 않았습니다.")
-    except Exception:
+            if min_idle_seconds is not None and not idle_for(state, min_idle_seconds):
+                raise ControlRefused("유휴 시간이 기준에 도달했는지 확인할 수 없어 종료하지 않았습니다.")
+    except Exception as error:
         for spec in attempted:
             try:
                 probe(spec, "resume")
             except Exception:
                 pass  # Remain drained on uncertainty; never force a restart/termination.
+        if min_idle_seconds is not None and not isinstance(error, ControlRefused):
+            raise ControlRefused("유휴 상태를 다시 확인할 수 없어 자동 종료하지 않았습니다.") from error
         raise
 
 
@@ -95,6 +132,9 @@ def container_state(run, docker, project, spec, container_ids):
         return {"state": "ready", "reason": "접속은 가능하지만 작업 상태를 확인할 수 없어 웹 종료·전환이 제한됩니다.", "can_stop": False}
     if not work["ready"]:
         return {"state": "starting", "reason": "서비스 준비를 기다리고 있습니다.", "can_stop": False}
-    return {"state": "busy" if work["busy"] else "ready",
-            "reason": "진행 중인 작업이 있습니다." if work["busy"] else ("신규 작업이 차단되어 있습니다. 운영자 확인이 필요합니다." if work["drained"] else ""),
-            "can_stop": not work["busy"]}
+    state = {"state": "busy" if work["busy"] else "ready",
+             "reason": "진행 중인 작업이 있습니다." if work["busy"] else ("신규 작업이 차단되어 있습니다. 운영자 확인이 필요합니다." if work["drained"] else ""),
+             "can_stop": not work["busy"]}
+    if not work["busy"] and not work["drained"] and idle_for(work, 0):
+        state["idle_seconds"] = work["idle_seconds"]
+    return state

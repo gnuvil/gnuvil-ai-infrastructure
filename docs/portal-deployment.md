@@ -36,7 +36,7 @@ D8:E0:FE:EF:B2:E5:CD:49:D2:63:27:BC:7E:43:89:2E:FD:18:6B:91:18:23:80:EF:8E:DC:A9
 
 Proxy는 `portal-access` Profile에만 포함되며 기본 Profile에는 포털만 있다. LAN 주소·토큰·소켓 GID는 root 전용 `/etc/gnuvil-ai/portal.env`에 있다. 사용자 이름·암호, htpasswd, 토큰 snippet과 개인 키는 모두 저장소 밖에서 생성했다.
 
-기존 ComfyUI는 Health Check가 없는 채 실행 중이므로 컨테이너를 재생성하는 대신 정책의 `ready_url: http://127.0.0.1:8188/system_stats`로 실제 준비 상태를 확인한다. Compose Health Check는 다음에 운영자가 ComfyUI 컨테이너를 새로 만들 때 적용된다. 작업 상태·원자적 drain adapter는 아직 없으므로 포털에서 ComfyUI 종료·다른 GPU 서비스로 전환은 제한한다.
+ComfyUI 준비 상태는 Compose Health Check와 `ready_url: http://127.0.0.1:8188/system_stats`로 확인한다. 현재 Compose 구성은 저장소의 종료 제어 확장을 읽기 전용으로 연결한다. 확장이 등록된 컨테이너에서는 포털이 전용 Unix 소켓을 통해 작업 상태를 확인하고, 실행·대기 작업이 모두 없을 때 종료 버튼을 활성화한다. 기존 이미지로 실행하며, 확장이 연결된 새 컨테이너가 필요하다.
 
 ## 재현 및 변경
 
