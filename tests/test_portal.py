@@ -342,8 +342,10 @@ class ControllerTests(unittest.TestCase):
     def setUp(self):
         policy = gpu.read_policy()
         portal = load_yaml(ROOT / "configs/portal.yaml")
+        targets = {target: {} for name, value in policy["services"].items()
+                   for target in service_spec(name, value)["targets"]}
         with patch.object(controller_module.gpu, "read_policy", return_value=policy), \
-             patch.object(controller_module.gpu, "compose_config", return_value={"name": "test", "services": {name: {} for name in policy["services"]}}), \
+             patch.object(controller_module.gpu, "compose_config", return_value={"name": "test", "services": targets}), \
              patch.object(controller_module.gpu, "validate_compose"):
             self.controller = controller_module.Controller(start_sampler=False)
         self.addCleanup(self.controller.worker.shutdown)
