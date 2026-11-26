@@ -5,6 +5,7 @@ from PIL import Image
 
 from app.core.comfyui_client import comfyui_client, ComfyUIUnavailableError
 from app.core.config import OUTPUTS_DIR
+from app.services import output_files
 
 POLL_INTERVAL_SECONDS = 1.0
 POLL_TIMEOUT_SECONDS = 300
@@ -35,6 +36,7 @@ async def run_workflow_and_save(workflow: dict, timeout: float = POLL_TIMEOUT_SE
                     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
                     out_path = OUTPUTS_DIR / image_info["filename"]
                     out_path.write_bytes(image_bytes)
+                    output_files.record_saved(image_info, out_path)
                     return out_path
 
         await asyncio.sleep(POLL_INTERVAL_SECONDS)

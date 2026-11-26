@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import CORS_ORIGINS, FRONTEND_DIST, OUTPUTS_DIR, UPLOADS_DIR
 from app.services.db import init_db
 from app.services import output_files, queue_service
-from app.api import generate, models, img2img, inpaint, queue, controlnet, ipadapter, video, characters, qwen, monitor
+from app.api import generate, models, img2img, inpaint, queue, controlnet, ipadapter, video, characters, qwen, monitor, gallery
 
 app = FastAPI(title="Local Image AI Studio")
 
@@ -43,6 +43,7 @@ app.include_router(video.router, prefix="/api")
 app.include_router(characters.router, prefix="/api")
 app.include_router(qwen.router, prefix="/api")
 app.include_router(monitor.router, prefix="/api")
+app.include_router(gallery.router, prefix="/api")
 
 
 @app.get("/api/health")

@@ -2,7 +2,7 @@
 services:
   studio:
     platform: linux/amd64
-    image: gnuvil-ai/studio:333b4c2
+    image: gnuvil-ai/studio:0af2a52
     build:
       context: .
     # Companion of the comfyui GPU group (configs/gpu-policy.yaml): started and stopped with ComfyUI.
@@ -29,9 +29,9 @@ services:
     volumes:
       - /srv/ai-data/state/studio:/data/state
       - /srv/ai-data/outputs/studio:/data/outputs
-      # LoRA metadata (trigger word hints) and recovery of results ComfyUI already wrote
+      # LoRA metadata (read-only); ComfyUI outputs are writable so the gallery can delete them
       - /srv/ai-data/models/comfyui/loras:/models/loras:ro
-      - /srv/ai-data/outputs/comfyui:/comfyui-output:ro
+      - /srv/ai-data/outputs/comfyui:/comfyui-output
     pull_policy: never
     restart: "no"
     read_only: true

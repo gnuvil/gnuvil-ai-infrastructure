@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import {
   videoGenerate,
   getVideoModels,
@@ -34,6 +34,7 @@ import MaskEditor from './components/MaskEditor'
 import TagSuggestField from './components/TagSuggestField'
 import CharacterPanel from './components/CharacterPanel'
 import ApiDashboard from './components/ApiDashboard'
+import Gallery from './components/Gallery'
 
 const SAMPLERS = ['euler', 'euler_ancestral', 'dpmpp_2m', 'dpmpp_sde', 'ddim', 'lcm']
 
@@ -48,6 +49,7 @@ interface ChatMessage {
   imageUrl?: string
   sourceImageUrl?: string
   generationId?: number
+  aspect?: number
   status?: 'queued' | 'running' | 'done' | 'error' | 'cancelled' | 'note'
   note?: string
   progress?: {
@@ -76,6 +78,14 @@ function formatDuration(seconds: number): string {
 
 function isVideoUrl(url?: string | null): boolean {
   return !!url && /\.(mp4|webm|mkv)$/i.test(url)
+}
+
+/** Overall sampling progress of a running message, 0-100. */
+function genPercent(m: { progress?: { value: number; max: number; done?: number; total?: number } }): number {
+  const p = m.progress
+  if (!p) return 0
+  if (p.total) return Math.min(100, Math.round(((p.done ?? 0) / p.total) * 100))
+  return Math.min(100, Math.round((p.value / Math.max(1, p.max)) * 100))
 }
 
 function Chevron({ open }: { open: boolean }) {
@@ -114,6 +124,7 @@ function mergeCharacterTags(chars: Character[], prompt: string): string {
 
 function App() {
   const [dashboardMode, setDashboardMode] = useState(false)
+  const [galleryMode, setGalleryMode] = useState(false)
   const [checkpoints, setCheckpoints] = useState<string[]>([])
   const [checkpoint, setCheckpoint] = useState('')
   const [checkpointError, setCheckpointError] = useState<string | null>(null)
@@ -208,20 +219,18 @@ function App() {
   const [history, setHistory] = useState<GenerationRecord[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
-  // ComfyUI can still be booting when this page opens, so keep retrying until the lists arrive.
+  // ComfyUI is a switchable service on the server: load the model lists once on open and again each
+  // time the GPU poll below sees ComfyUI come up. (No blind retry loop: it flooded the backend while off.)
+  const comfyOnline = gpu !== null
   useEffect(() => {
-    let loaded = false
-    let attempts = 0
+    if (!comfyOnline && checkpoints.length > 0) return
 
     function loadAll() {
       getCheckpoints()
         .then((list) => {
           setCheckpoints(list)
           setCheckpointError(null)
-          if (list.length > 0) {
-            setCheckpoint((prev) => prev || list[0])
-            loaded = true
-          }
+          if (list.length > 0) setCheckpoint((prev) => prev || list[0])
         })
         .catch((e) => setCheckpointError(e.message))
       getLoras().then(setAvailableLoras).catch(() => setAvailableLoras([]))
@@ -264,16 +273,8 @@ function App() {
     }
 
     loadAll()
-    const timer = setInterval(() => {
-      attempts += 1
-      if (loaded || attempts > 60) {
-        clearInterval(timer)
-        return
-      }
-      loadAll()
-    }, 3000)
-    return () => clearInterval(timer)
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when ComfyUI goes on/off
+  }, [comfyOnline])
 
   useEffect(() => {
     const poll = () => getGpuStatus().then(setGpu).catch(() => setGpu(null))
@@ -582,7 +583,7 @@ function App() {
     const effLoras = [...selectedLoras, ...charLoraList.filter((l) => !selectedLoras.some((s) => s.name === l.name))]
     const activeMask = maskBlob
     const aiMsgId = crypto.randomUUID()
-    setMessages((prev) => [...prev, userMsg, { id: aiMsgId, role: 'ai', status: 'queued', note: agentNote || undefined }])
+    setMessages((prev) => [...prev, userMsg, { id: aiMsgId, role: 'ai', status: 'queued', note: agentNote || undefined, aspect: width / Math.max(1, height) }])
     setPrompt('')
     clearSource()
     setVideoSource(null)
@@ -845,6 +846,20 @@ function App() {
 
   return (
     dashboardMode ? <ApiDashboard onBack={() => setDashboardMode(false)} /> :
+    galleryMode ? (
+      <Gallery
+        onBack={() => setGalleryMode(false)}
+        onDeleted={(ids) =>
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.role === 'ai' && m.generationId && ids.includes(m.generationId)
+                ? { ...m, status: 'note', imageUrl: undefined, text: `#${m.generationId} 결과는 갤러리에서 삭제했습니다.` }
+                : m,
+            ),
+          )
+        }
+      />
+    ) :
     <div className="flex h-screen w-screen bg-[#0b0d14] text-neutral-100">
       <aside className="w-80 shrink-0 border-r border-neutral-800/80 bg-neutral-950/60 overflow-y-auto p-4 space-y-3">
         <div className="flex items-center gap-3 px-1 pb-2">
@@ -1639,7 +1654,7 @@ function App() {
               }`}
               title={gpu ? 'ComfyUI가 실행 중입니다' : '포털에서 ComfyUI를 켜야 생성할 수 있습니다'}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${gpu ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              <span className="relative flex w-1.5 h-1.5">{gpu && <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping" />}<span className={`relative w-1.5 h-1.5 rounded-full ${gpu ? 'bg-emerald-400' : 'bg-amber-400'}`} /></span>
               {gpu ? 'ComfyUI 연결됨' : 'ComfyUI 꺼짐'}
             </span>
             {gpu && (
@@ -1659,7 +1674,10 @@ function App() {
                 </span>
               </div>
             )}
-            <button className="ml-auto chip" onClick={() => setDashboardMode(true)}>
+            <button className="ml-auto chip" onClick={() => setGalleryMode(true)}>
+              🖼 갤러리
+            </button>
+            <button className="chip" onClick={() => setDashboardMode(true)}>
               API 요청 대시보드
             </button>
           </div>
@@ -1668,15 +1686,18 @@ function App() {
         <div ref={scrollRef} className="relative flex-1 overflow-y-auto px-6 py-6">
           <div className="max-w-3xl mx-auto space-y-5">
           {messages.length === 0 && (
-            <div className="flex flex-col items-center text-center pt-16 pb-6">
+            <div className="relative flex flex-col items-center text-center pt-16 pb-6 anim-in">
+              <span className="orb w-72 h-72 -top-10 left-[10%]" style={{ background: '#8b5cf6' }} />
+              <span className="orb w-64 h-64 top-24 right-[8%]" style={{ background: '#d946ef', animationDelay: '-5s', ['--fx' as string]: '-40px', ['--fy' as string]: '25px' } as CSSProperties} />
+              <span className="orb w-56 h-56 top-56 left-[35%]" style={{ background: '#38bdf8', opacity: 0.2, animationDelay: '-9s' }} />
               <div
-                className="w-14 h-14 rounded-2xl grid place-items-center text-2xl shadow-xl shadow-fuchsia-500/20 mb-5"
+                className="relative w-14 h-14 rounded-2xl grid place-items-center text-2xl mb-5 logo-glow"
                 style={{ backgroundImage: 'linear-gradient(135deg, var(--accent-from), var(--accent-to))' }}
               >
                 ✦
               </div>
-              <h2 className="text-2xl font-semibold tracking-tight">무엇을 그려 볼까요?</h2>
-              <p className="mt-2 text-sm text-neutral-400 max-w-md">
+              <h2 className="relative text-3xl font-semibold tracking-tight">무엇을 <span className="accent-text">그려 볼까요?</span></h2>
+              <p className="relative mt-2 text-sm text-neutral-400 max-w-md">
                 태그를 쉼표로 이어 적으면 됩니다. 이미지를 첨부하면 편집하고, 결과에서 바로 영상으로 이어 만들 수 있어요.
               </p>
               {!gpu && (
@@ -1685,8 +1706,8 @@ function App() {
                 </div>
               )}
               <div className="mt-8 flex flex-wrap justify-center gap-2 max-w-2xl">
-                {EXAMPLE_PROMPTS.map((p) => (
-                  <button key={p} className="chip" onClick={() => setPrompt(p)}>
+                {EXAMPLE_PROMPTS.map((p, i) => (
+                  <button key={p} className="chip anim-in" style={{ animationDelay: `${200 + i * 80}ms` }} onClick={() => setPrompt(p)}>
                     {p}
                   </button>
                 ))}
@@ -1695,7 +1716,7 @@ function App() {
           )}
           {messages.map((m) =>
             m.role === 'user' ? (
-              <div key={m.id} className="flex justify-end">
+              <div key={m.id} className="flex justify-end anim-in">
                 <div className="max-w-xl rounded-2xl rounded-br-md px-4 py-2.5 text-sm space-y-2 text-white shadow-lg shadow-violet-900/30" style={{ backgroundImage: 'linear-gradient(135deg, #6d28d9, #a21caf)' }}>
                   {m.sourceImageUrl && (
                     <img src={m.sourceImageUrl} alt="원본" className="rounded-lg max-h-40 ring-1 ring-white/20" />
@@ -1704,53 +1725,57 @@ function App() {
                 </div>
               </div>
             ) : (
-              <div key={m.id} className="flex justify-start">
+              <div key={m.id} className="flex justify-start anim-in">
                 <div className="max-w-xl w-fit card rounded-2xl rounded-bl-md px-4 py-3 text-sm space-y-3">
                   {m.note && <p className="text-xs text-neutral-400 whitespace-pre-line">{m.note}</p>}
                   {m.status === 'note' && <p className="text-neutral-300 whitespace-pre-line">{m.text}</p>}
-                  {m.status === 'queued' && (
-                    <p className="text-neutral-400">
-                      {m.ahead && m.ahead > 0 ? `대기열 ${m.ahead + 1}번째 (앞에 ${m.ahead}개 작업)` : '대기 중...'}
-                    </p>
-                  )}
-                  {m.status === 'running' && (
-                    <div className="space-y-1 w-72">
-                      <p className="text-neutral-300">
-                        {m.segment ? `[구간 ${m.segment[0]}/${m.segment[1]}] ` : ''}
-                        {m.stage ?? '준비 중'}
-                        {m.progress && m.progress.max > 0 && ` · ${m.progress.value}/${m.progress.max} 스텝`}
-                      </p>
-                      <div className="h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                  {(m.status === 'queued' || m.status === 'running') && (() => {
+                    const pct = genPercent(m)
+                    const label =
+                      m.status === 'queued'
+                        ? m.ahead && m.ahead > 0
+                          ? `대기열 ${m.ahead + 1}번째 (앞에 ${m.ahead}개 작업)`
+                          : '대기 중...'
+                        : `${m.segment ? `[구간 ${m.segment[0]}/${m.segment[1]}] ` : ''}${m.stage ?? '준비 중'}`
+                    return (
+                      <div className="space-y-2.5 w-80 max-w-full">
                         <div
-                          className="h-full rounded-full transition-all"
-                          style={{
-                            backgroundImage: 'linear-gradient(90deg, var(--accent-from), var(--accent-to))',
-                            width: m.progress?.total
-                              ? `${Math.min(100, ((m.progress.done ?? 0) / m.progress.total) * 100)}%`
-                              : m.progress
-                                ? `${Math.min(100, (m.progress.value / Math.max(1, m.progress.max)) * 100)}%`
-                                : '5%',
-                          }}
-                        />
+                          className="gen-canvas"
+                          style={{ aspectRatio: String(m.aspect ?? 1), ['--noise' as string]: String(Math.max(0.15, 0.8 - pct / 140)) } as CSSProperties}
+                        >
+                          <span className="shine" />
+                          <div className="absolute inset-0 grid place-items-center text-center px-4">
+                            <div>
+                              <p className="text-4xl font-semibold tabular-nums text-white/90 drop-shadow">
+                                {m.status === 'running' && pct > 0 ? `${pct}%` : '✦'}
+                              </p>
+                              <p className="mt-1.5 text-xs text-white/75 breathe">{label}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="progress-track">
+                          <div className="progress-fill" style={{ width: `${m.status === 'running' ? Math.max(4, pct) : 2}%` }} />
+                        </div>
+                        {m.status === 'running' && (
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs text-neutral-500">
+                              {m.progress && m.progress.max > 0 ? `${m.progress.value}/${m.progress.max} 스텝` : '샘플링 시작 전'}
+                              {m.startedAt !== undefined && ` · 경과 ${formatDuration((clock - m.startedAt) / 1000)}`}
+                              {m.progress?.eta != null && ` · 남은 약 ${formatDuration(m.progress.eta)}`}
+                            </p>
+                            <button className="text-xs text-red-400 hover:text-red-300 shrink-0" onClick={() => handleCancel(m.generationId)}>
+                              ✕ 취소
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-xs text-neutral-500">
-                        {m.progress?.total ? `샘플링 전체 ${Math.round(((m.progress.done ?? 0) / m.progress.total) * 100)}%` : '샘플링 시작 전'}
-                        {m.startedAt !== undefined && ` · 경과 ${formatDuration((clock - m.startedAt) / 1000)}`}
-                        {m.progress?.eta != null && ` · 샘플링 남은 약 ${formatDuration(m.progress.eta)}`}
-                      </p>
-                      <button
-                        className="text-xs text-red-400 hover:text-red-300"
-                        onClick={() => handleCancel(m.generationId)}
-                      >
-                        ✕ 취소
-                      </button>
-                    </div>
-                  )}
+                    )
+                  })()}
                   {m.status === 'cancelled' && <p className="text-neutral-500">취소됨</p>}
                   {m.status === 'error' && <p className="text-red-400">오류: {m.text}</p>}
                   {m.status === 'done' && m.imageUrl && isVideoUrl(m.imageUrl) && (
                     <>
-                      <video src={m.imageUrl} controls loop muted autoPlay playsInline className="rounded-xl max-w-full max-h-[70vh] shadow-2xl shadow-black/40 ring-1 ring-white/5" />
+                      <video src={m.imageUrl} controls loop muted autoPlay playsInline className="reveal rounded-xl max-w-full max-h-[70vh] shadow-2xl shadow-black/40 ring-1 ring-white/5" />
                       {m.generationId && interpAvailable && (
                         <button className="chip" onClick={() => smoothVideo(m.generationId!)}>
                           🎞 부드럽게 (프레임 2배, 약 10초)
@@ -1760,7 +1785,7 @@ function App() {
                   )}
                   {m.status === 'done' && m.imageUrl && !isVideoUrl(m.imageUrl) && (
                     <>
-                      <a href={m.imageUrl} target="_blank" rel="noreferrer"><img src={m.imageUrl} alt="generated" className="rounded-xl max-w-full shadow-2xl shadow-black/40 ring-1 ring-white/5" /></a>
+                      <a href={m.imageUrl} target="_blank" rel="noreferrer"><img src={m.imageUrl} alt="generated" className="reveal rounded-xl max-w-full shadow-2xl shadow-black/40 ring-1 ring-white/5" /></a>
                       <div className="flex flex-wrap gap-2">
                         <button
                           className="chip"
@@ -1898,7 +1923,7 @@ function App() {
               }}
             />
           )}
-          <div className="flex items-center gap-2 rounded-2xl border border-neutral-800 bg-neutral-900/90 p-1.5 shadow-2xl shadow-black/40 focus-within:border-violet-500/60">
+          <div className="composer shadow-2xl shadow-black/40"><div className="composer-inner flex items-center gap-2 p-1.5">
             <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFileSelected} />
             <button
               className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800"
@@ -1922,7 +1947,7 @@ function App() {
             >
               생성
             </button>
-          </div>
+          </div></div>
           </div>
         </div>
       </main>

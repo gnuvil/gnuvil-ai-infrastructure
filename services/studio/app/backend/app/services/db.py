@@ -43,6 +43,60 @@ def init_db():
             conn.execute(f"ALTER TABLE generations ADD COLUMN {column} {ddl}")
         except sqlite3.OperationalError:
             pass  # column already exists
+    # Every file a generation left behind (ComfyUI's own copy and the app copy), so deleting a
+    # generation can remove intermediate files too (video segments, inpaint harmonize passes).
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS generation_files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            generation_id INTEGER NOT NULL,
+            comfy_path TEXT NOT NULL DEFAULT '',
+            app_name TEXT NOT NULL DEFAULT ''
+        )
+        """
+    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_generation_files_gid ON generation_files(generation_id)")
+    conn.commit()
+    conn.close()
+
+
+def add_generation_file(generation_id: int, comfy_path: str, app_name: str) -> None:
+    conn = get_connection()
+    conn.execute(
+        "INSERT INTO generation_files (generation_id, comfy_path, app_name) VALUES (?, ?, ?)",
+        (generation_id, comfy_path, app_name),
+    )
+    conn.commit()
+    conn.close()
+
+
+def list_generation_files(generation_id: int) -> list[sqlite3.Row]:
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM generation_files WHERE generation_id = ?", (generation_id,)).fetchall()
+    conn.close()
+    return rows
+
+
+def list_generations_page(offset: int, limit: int, media: str | None) -> tuple[list[sqlite3.Row], int]:
+    """Finished generations that have a result file, newest first, with the total count for paging."""
+    where = "status = 'completed' AND image_path IS NOT NULL"
+    args: list = []
+    if media in ("image", "video"):
+        where += " AND media_type = ?"
+        args.append(media)
+    conn = get_connection()
+    total = conn.execute(f"SELECT COUNT(*) FROM generations WHERE {where}", args).fetchone()[0]
+    rows = conn.execute(
+        f"SELECT * FROM generations WHERE {where} ORDER BY id DESC LIMIT ? OFFSET ?", [*args, limit, offset]
+    ).fetchall()
+    conn.close()
+    return rows, total
+
+
+def delete_generation(generation_id: int) -> None:
+    conn = get_connection()
+    conn.execute("DELETE FROM generation_files WHERE generation_id = ?", (generation_id,))
+    conn.execute("DELETE FROM generations WHERE id = ?", (generation_id,))
     conn.commit()
     conn.close()
 

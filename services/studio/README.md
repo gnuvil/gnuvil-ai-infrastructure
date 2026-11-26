@@ -6,6 +6,10 @@
 - 접속: http://192.168.50.14:8190 (동아리방 LAN, **ComfyUI와 같이 로그인 없음**). GPU 정책에서 `comfyui` 그룹의 동반 서비스(`companions: [studio]`)라 ComfyUI와 **항상 같이 켜지고 꺼진다**. 포털의 ComfyUI 카드와 Image AI Studio 카드는 따로 보이지만 둘 다 같은 그룹을 제어한다(`scripts/service_config.py`가 같은 GPU 그룹을 여러 카드가 공유하는 것만 허용).
 - ComfyUI가 꺼져 있으면 생성 요청은 "포털에서 ComfyUI를 켠 뒤 다시 시도" 오류로 끝난다. 백엔드는 ComfyUI를 직접 켜거나 GPU를 중재하지 않는다(서버의 GPU 컨트롤러와 `gnuvil_lifecycle` 계약을 그대로 따른다). 백엔드 큐에 작업이 남아 있는 동안 포털에서 ComfyUI를 종료하면 남은 작업은 실패로 기록된다.
 
+## 갤러리
+
+헤더의 **갤러리**에서 Studio로 만든 결과를 이미지/영상별로 보고 지울 수 있다. 삭제하면 생성 기록(DB), Studio 결과 폴더의 파일, ComfyUI 출력 폴더의 원본(영상 구간·인페인트 중간 파일 포함)이 함께 지워지며 되돌릴 수 없다. 생성 중인 작업은 지울 수 없다. ComfyUI 화면에서 직접 만든 파일은 대상이 아니다.
+
 ## 데이터 경로
 
 | 호스트 | 컨테이너 | 용도 |
@@ -13,7 +17,7 @@
 | `/srv/ai-data/state/studio` | `/data/state` | `app.db`(생성 기록·캐릭터), `uploads/`, `danbooru_tags.csv`(태그 자동완성, 없으면 기능만 꺼짐) |
 | `/srv/ai-data/outputs/studio` | `/data/outputs` | 결과 이미지·영상 (ComfyUI `/view`로 받아 저장) |
 | `/srv/ai-data/models/comfyui/loras` | `/models/loras` (ro) | LoRA 정보(트리거 후보) |
-| `/srv/ai-data/outputs/comfyui` | `/comfyui-output` (ro) | 누락 결과 복구용 |
+| `/srv/ai-data/outputs/comfyui` | `/comfyui-output` | 누락 결과 복구, 갤러리 삭제 시 ComfyUI 원본까지 삭제 |
 
 ## ComfyUI 쪽 변경 (같은 브랜치)
 

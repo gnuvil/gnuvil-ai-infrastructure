@@ -251,6 +251,47 @@ export async function getGeneration(id: number): Promise<GenerationRecord> {
   return handleJson<GenerationRecord>(res)
 }
 
+export interface GalleryItem {
+  id: number
+  image_path: string
+  media_type: 'image' | 'video'
+  prompt: string
+  negative_prompt: string
+  model: string
+  seed: number
+  steps: number
+  cfg: number
+  sampler: string
+  width: number
+  height: number
+  frames: number
+  created_at: string
+  file_size: number | null
+  file_missing: boolean
+}
+
+export async function getGallery(offset: number, limit: number, media?: 'image' | 'video'): Promise<{ total: number; items: GalleryItem[] }> {
+  const q = new URLSearchParams({ offset: String(offset), limit: String(limit) })
+  if (media) q.set('media', media)
+  return handleJson(await fetch(`/api/gallery?${q}`))
+}
+
+export interface DeleteResult {
+  deleted: number
+  files: number
+  results: { id: number; deleted: boolean; reason?: string; files?: string[] }[]
+}
+
+export async function deleteGenerations(ids: number[]): Promise<DeleteResult> {
+  return handleJson(
+    await fetch('/api/gallery/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    }),
+  )
+}
+
 export async function getHistory(): Promise<GenerationRecord[]> {
   const res = await fetch('/api/history')
   const data = await handleJson<{ generations: GenerationRecord[] }>(res)

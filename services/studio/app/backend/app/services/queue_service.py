@@ -8,7 +8,7 @@ import aiohttp
 
 from app.core.comfyui_client import COMFYUI_OFF_MESSAGE, comfyui_client, ComfyUIUnavailableError
 from app.core.config import COMFYUI_WS_URL, OUTPUTS_DIR
-from app.services import db
+from app.services import db, output_files
 from app.services.generation_service import get_image_size
 from app.services.vram_manager import gpu_lock
 
@@ -269,6 +269,7 @@ async def _run_job_with_progress(job: GenerationJob) -> "tuple[object, int, int]
         OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
         out_path = OUTPUTS_DIR / image_info["filename"]
         out_path.write_bytes(image_bytes)
+        output_files.record_saved(image_info, out_path)
         if not out_path.is_file() or out_path.stat().st_size == 0:
             raise ComfyUIUnavailableError(f"결과 파일을 저장하지 못했습니다: {out_path.name}")
         if out_path.suffix.lower() in VIDEO_SUFFIXES:
@@ -321,6 +322,7 @@ async def _worker_loop():
             continue
 
         _current_generation_id = job.generation_id
+        output_files.current_generation.set(job.generation_id)
         _job_started[job.generation_id] = time.monotonic()
         db.update_generation_status(job.generation_id, "running")
         await _publish(job.generation_id, {"type": "status", "status": "running"})
