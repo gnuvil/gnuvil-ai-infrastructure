@@ -9,7 +9,8 @@ services:
     mode: service
     ready_url: http://127.0.0.1:8081/health
     probe_socket: /run/gnuvil-llamacpp/lifecycle.sock
-stop_timeout_seconds: 30
+# ComfyUI의 모델 정리와 컨테이너 종료를 기다린다.
+stop_timeout_seconds: 300
 idle_timeout_seconds: 30
 job_timeout_seconds: 60
 idle_memory_mib: 64
