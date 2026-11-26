@@ -17,10 +17,24 @@
   document.body.addEventListener('htmx:configRequest', event => {
     event.detail.headers['X-CSRF-Token'] = document.getElementById('dashboard').dataset.csrf;
   });
-  document.body.addEventListener('htmx:responseError', () => {
-    document.getElementById('refresh-status').textContent = '갱신에 실패했습니다. 인증 상태를 확인하거나 페이지를 새로고침해 주세요.';
-  });
-  document.body.addEventListener('htmx:sendError', () => {
-    document.getElementById('refresh-status').textContent = '연결이 끊겼습니다. 표시된 상태가 최신이 아닐 수 있습니다. 자동으로 다시 확인합니다.';
-  });
+  function showRequestError(event) {
+    const badge = document.getElementById('connection-status');
+    badge.textContent = '갱신 지연';
+    badge.className = 'connection delayed';
+    for (const action of document.querySelectorAll('#dashboard form button')) {
+      action.disabled = true;
+    }
+    const status = event.detail.xhr?.status;
+    let message = '상태 갱신이 지연되고 있습니다. 자동으로 다시 확인합니다.';
+    if (event.detail.requestConfig?.verb === 'post') {
+      message = '제어 요청 결과를 확인할 수 없습니다. 서비스 상태를 다시 확인해 주세요.';
+    }
+    if (status === 401 || status === 403) {
+      message = '인증을 확인하려면 페이지를 새로고침해 주세요.';
+    }
+    document.getElementById('refresh-status').textContent = message;
+  }
+  for (const event of ['htmx:responseError', 'htmx:sendError', 'htmx:timeout']) {
+    document.body.addEventListener(event, showRequestError);
+  }
 })();

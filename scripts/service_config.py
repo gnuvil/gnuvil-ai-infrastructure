@@ -117,10 +117,14 @@ def validate_portal(portal, policy=None, compose=None):
                 raise ValueError(f"{key}: invalid service URL")
         if ("gpu_service" in service) == ("cpu_service" in service):
             raise ValueError(f"{key}: choose exactly one of gpu_service/cpu_service")
+        # Several cards may show the same GPU group (e.g. ComfyUI and a UI that runs as its companion);
+        # each one starts/stops that whole group. Only these shared GPU groups may repeat targets.
+        shared_gpu = False
         if "gpu_service" in service:
             name = service["gpu_service"]
-            if not identifier(name) or name in gpu_seen:
-                raise ValueError(f"{key}: invalid or duplicate GPU mapping")
+            if not identifier(name):
+                raise ValueError(f"{key}: invalid GPU mapping")
+            shared_gpu = name in gpu_seen
             gpu_seen.add(name)
             if policy is not None and name not in policy["services"]:
                 raise ValueError(f"{key}: GPU service is not in the policy")
@@ -133,7 +137,7 @@ def validate_portal(portal, policy=None, compose=None):
             name = cpu.get("service")
             spec = service_spec(name, {"mode": "service", **{k: v for k, v in cpu.items() if k != "service"}})
         if spec:
-            if targets_seen.intersection(spec["targets"]) or "portal" in spec["targets"]:
+            if (not shared_gpu and targets_seen.intersection(spec["targets"])) or "portal" in spec["targets"]:
                 raise ValueError(f"{key}: shared targets and portal self-control are forbidden")
             targets_seen.update(spec["targets"])
             if compose and any(target not in compose["services"] for target in spec["targets"]):
