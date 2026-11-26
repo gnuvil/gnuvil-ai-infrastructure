@@ -2,7 +2,7 @@
 services:
   studio:
     platform: linux/amd64
-    image: gnuvil-ai/studio:685d0ba
+    image: gnuvil-ai/studio:8f1817d
     build:
       context: .
     profiles: [studio]
