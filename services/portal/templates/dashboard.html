@@ -13,8 +13,8 @@
     <div class="section-heading"><div><h2 id="service-title">서비스</h2></div><span class="service-count">{{ services|length }}개 서비스</span></div>
     <div class="service-grid">
     {% for service in services %}
-      <article class="service-card">
-        <div class="card-heading"><span class="service-icon" aria-hidden="true">{{ {'chip': '▦', 'image': '▧', 'message-square': '▤', 'audio': '♫'}.get(service.icon, '◇') }}</span><span class="badge {{ service.state }}">{{ states.get(service.state, '확인 불가') }}</span></div>
+      <article class="service-card{{ ' is-ready' if service.state == 'ready' else '' }}">
+        <div class="card-heading"><span class="service-icon" aria-hidden="true">{{ {'chip': '▦', 'image': '▧', 'message-square': '▤', 'audio': '♫'}.get(service.icon, '◇') }}</span><span class="badge {{ service.state }}">{% if service.state == 'ready' %}<svg class="status-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m4 10 4 4 8-8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>{% endif %}{{ states.get(service.state, '확인 불가') }}</span></div>
         <span class="category">{{ service.category }} · {{ 'GPU' if service.gpu_service is defined else 'CPU' }}</span>
         <h3>{{ service.name }}</h3><p class="description">{{ service.description }}</p>
         <p class="service-reason" role="status">{{ (service.start_reason if service.state in ['stopped', 'error'] and service.start_reason else service.reason) or ('시작할 수 있습니다.' if service.state == 'stopped' else '서비스가 준비되었습니다.') }}</p>
