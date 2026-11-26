@@ -2,7 +2,7 @@
 services:
   studio:
     platform: linux/amd64
-    image: gnuvil-ai/studio:6c65661
+    image: gnuvil-ai/studio:2a34e96
     build:
       context: .
     # Companion of the comfyui GPU group (configs/gpu-policy.yaml): started and stopped with ComfyUI.
@@ -22,7 +22,8 @@ services:
       COMFYUI_OUTPUT_DIR: /comfyui-output
       # UI and API share one origin; only needed for a separately hosted dev frontend.
       CORS_ORIGINS: ""
-      LOCAL_AI_IDLE_FREE_SECONDS: "20"
+      # 0 = keep models in VRAM: ComfyUI owns the GPU while it runs, and reloading from disk is slow on this VM
+      LOCAL_AI_IDLE_FREE_SECONDS: "0"
     ports:
       - "127.0.0.1:8190:8000"
       - "192.168.50.14:8190:8000"

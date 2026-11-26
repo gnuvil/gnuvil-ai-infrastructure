@@ -20,7 +20,7 @@ async def cancel(generation_id: int):
     if row["status"] not in ("queued", "running"):
         raise HTTPException(status_code=400, detail=f"취소할 수 없는 상태입니다: {row['status']}")
 
-    ok = queue_service.request_cancel(generation_id)
+    ok = await queue_service.request_cancel(generation_id)
     if not ok:
         raise HTTPException(status_code=409, detail="이미 종료된 작업입니다.")
     return {"generation_id": generation_id, "status": "cancelling"}

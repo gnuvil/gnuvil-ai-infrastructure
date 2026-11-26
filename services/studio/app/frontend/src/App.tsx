@@ -846,6 +846,7 @@ function App() {
 
   async function handleCancel(generationId?: number) {
     if (!generationId) return
+    setMessages((prev) => prev.map((m) => (m.generationId === generationId ? { ...m, stage: '취소하는 중...' } : m)))
     try {
       await cancelGeneration(generationId)
     } catch {
@@ -1745,7 +1746,9 @@ function App() {
                   {(m.status === 'queued' || m.status === 'running') && (() => {
                     const pct = genPercent(m)
                     const label =
-                      m.status === 'queued'
+                      m.status === 'queued' && m.stage === '취소하는 중...'
+                        ? m.stage
+                        : m.status === 'queued'
                         ? m.ahead && m.ahead > 0
                           ? `대기열 ${m.ahead + 1}번째 (앞에 ${m.ahead}개 작업)`
                           : '대기 중...'
@@ -1769,10 +1772,10 @@ function App() {
                         <div className="progress-track">
                           <div className="progress-fill" style={{ width: `${m.status === 'running' ? Math.max(4, pct) : 2}%` }} />
                         </div>
-                        {m.status === 'running' && (
+                        {(m.status === 'running' || m.status === 'queued') && (
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-xs text-neutral-500">
-                              {m.progress && m.progress.max > 0 ? `${m.progress.value}/${m.progress.max} 스텝` : '샘플링 시작 전'}
+                              {m.status === 'queued' ? '순서를 기다리는 중' : m.progress && m.progress.max > 0 ? `${m.progress.value}/${m.progress.max} 스텝` : m.stage ?? '준비 중'}
                               {m.startedAt !== undefined && ` · 경과 ${formatDuration((clock - m.startedAt) / 1000)}`}
                               {m.progress?.eta != null && ` · 남은 약 ${formatDuration(m.progress.eta)}`}
                             </p>

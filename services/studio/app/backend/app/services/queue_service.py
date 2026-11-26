@@ -108,6 +108,7 @@ _job_queue: "asyncio.Queue[GenerationJob]" = asyncio.Queue()
 _queue_order: list[int] = []
 _current_generation_id: int | None = None
 _cancel_requested: set[int] = set()
+_current_prompt_ids: dict[int, str] = {}  # generation -> ComfyUI prompt id while it runs
 _subscribers: dict[int, list[asyncio.Queue]] = {}
 _worker_task: asyncio.Task | None = None
 _idle_task: asyncio.Task | None = None
@@ -162,9 +163,24 @@ def _elapsed(generation_id: int) -> float:
     return round(time.monotonic() - started, 1) if started else 0.0
 
 
-def request_cancel(generation_id: int) -> bool:
-    if _current_generation_id == generation_id or generation_id in _queue_order:
+async def request_cancel(generation_id: int) -> bool:
+    """Cancels right away: a waiting job leaves the queue now; a running job is removed from ComfyUI's
+    queue and interrupted immediately (not only when ComfyUI next sends a progress message)."""
+    if _current_generation_id == generation_id:
         _cancel_requested.add(generation_id)
+        prompt_id = _current_prompt_ids.get(generation_id)
+        if prompt_id:
+            await comfyui_client.cancel_prompt(prompt_id)
+        return True
+    if generation_id in _queue_order:
+        # The worker skips it when it reaches the job; tell the user now instead of after the jobs ahead.
+        _cancel_requested.add(generation_id)
+        _queue_order.remove(generation_id)
+        db.update_generation_status(generation_id, "cancelled")
+        await _publish(generation_id, {"type": "cancelled"})
+        for waiting_id in list(_queue_order):
+            if waiting_id != _current_generation_id:
+                await _publish(waiting_id, {"type": "queue", "ahead": _queue_order.index(waiting_id)})
         return True
     return False
 
@@ -185,13 +201,31 @@ async def _run_job_with_progress(job: GenerationJob) -> "tuple[object, int, int]
     async with aiohttp.ClientSession() as session:
         async with session.ws_connect(ws_url, timeout=job.timeout) as ws:
             prompt_id = await comfyui_client.queue_prompt(job.workflow, client_id)
+            _current_prompt_ids[job.generation_id] = prompt_id
             await _publish(job.generation_id, {"type": "stage", "stage": stage, "elapsed": _elapsed(job.generation_id),
                                                 "segment": list(job.segment) if job.segment else None})
+            idle = 0.0
+            cancel_sent_at: float | None = None
             while True:
                 if job.generation_id in _cancel_requested:
-                    await comfyui_client.interrupt()
+                    now = time.monotonic()
+                    if cancel_sent_at is None:
+                        await comfyui_client.cancel_prompt(prompt_id)
+                        cancel_sent_at = now
+                    elif now - cancel_sent_at > 3 and not await comfyui_client.prompt_active(prompt_id):
+                        # removed from ComfyUI's queue before it ran: no "interrupted" message will come
+                        raise InterruptedError("Generation cancelled")
 
-                msg = await asyncio.wait_for(ws.receive(), timeout=job.timeout)
+                try:
+                    msg = await ws.receive(timeout=1.0)
+                except asyncio.TimeoutError:
+                    idle += 1.0
+                    if idle >= job.timeout:
+                        raise TimeoutError(f"ComfyUI가 {int(job.timeout)}초 동안 응답하지 않았습니다.")
+                    continue
+                idle = 0.0
+                if msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSING, aiohttp.WSMsgType.ERROR):
+                    raise ComfyUIUnavailableError("ComfyUI 연결이 끊어졌습니다.")
                 if msg.type != aiohttp.WSMsgType.TEXT:
                     continue
                 data = json.loads(msg.data)
@@ -356,6 +390,7 @@ async def _worker_loop():
             db.update_generation_status(job.generation_id, "failed")
             await _publish(job.generation_id, {"type": "failed", "error": str(e)})
         finally:
+            _current_prompt_ids.pop(job.generation_id, None)
             _cancel_requested.discard(job.generation_id)
             _job_started.pop(job.generation_id, None)
             if job.generation_id in _queue_order:

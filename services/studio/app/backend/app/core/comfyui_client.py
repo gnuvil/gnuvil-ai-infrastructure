@@ -166,6 +166,26 @@ class ComfyUIClient:
         except (aiohttp.ClientError, asyncio.TimeoutError):
             return False
 
+    async def cancel_prompt(self, prompt_id: str) -> None:
+        """Removes one prompt from ComfyUI's waiting queue and interrupts it if it is running.
+        Targeted by prompt id, so other people's ComfyUI jobs are left alone."""
+        try:
+            async with aiohttp.ClientSession() as session:
+                await session.post(f"{self.base_url}/queue", json={"delete": [prompt_id]}, timeout=aiohttp.ClientTimeout(total=5))
+                await session.post(f"{self.base_url}/interrupt", json={"prompt_id": prompt_id}, timeout=aiohttp.ClientTimeout(total=5))
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            pass
+
+    async def prompt_active(self, prompt_id: str) -> bool:
+        """True while the prompt is running or waiting in ComfyUI (True when unsure)."""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{self.base_url}/queue", timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                    q = await resp.json()
+        except (aiohttp.ClientError, asyncio.TimeoutError, ValueError):
+            return True
+        return any(item[1] == prompt_id for item in q.get("queue_running", []) + q.get("queue_pending", []))
+
     async def interrupt(self):
         async with aiohttp.ClientSession() as session:
             async with session.post(f"{self.base_url}/interrupt") as resp:
