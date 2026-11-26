@@ -412,9 +412,23 @@ class ControllerTests(unittest.TestCase):
             self.controller.execute("gpu-smoke", "stop", False)
         stop.assert_not_called()
 
+    def test_shared_gpu_cards_are_sampled_once_and_show_the_same_operation(self):
+        self.controller.portal["services"]["second-card"] = dict(self.controller.portal["services"]["comfyui"])
+        with patch.object(controller_module, "container_state", return_value={"state": "ready", "reason": "", "can_stop": True}) as inspect, \
+             patch.object(controller_module, "system_metrics", return_value=({}, None)), \
+             patch.object(controller_module.gpu, "active_containers", return_value=[]):
+            self.controller.refresh()
+        targets = [tuple(call.args[3]["targets"]) for call in inspect.call_args_list]
+        self.assertEqual(len(targets), len(set(targets)))
+        self.controller.operation = ("second-card", "stop")
+        states = self.controller.snapshot()["services"]
+        for key in ("second-card", "comfyui"):
+            self.assertEqual(states[key]["state"], "stopping")
+            self.assertFalse(states[key]["can_stop"])
+
     def test_sample_time_is_stable_until_new_collection_and_retained_when_stale(self):
         with patch.object(controller_module, "container_state", return_value={"state": "stopped", "reason": "", "can_stop": False}), \
-             patch.object(controller_module, "system_metrics", return_value=({}, None)), \
+             patch.object(controller_module, "system_metrics", return_value=({"cpu_percent": 42}, None)), \
              patch.object(controller_module.gpu, "active_containers", return_value=[]):
             self.controller.refresh()
         first = self.controller.snapshot()
@@ -424,6 +438,7 @@ class ControllerTests(unittest.TestCase):
         stale = self.controller.snapshot()
         self.assertEqual(first["collected_at"], stale["collected_at"])
         self.assertTrue(stale["stale"])
+        self.assertEqual(stale["metrics"]["cpu_percent"], 42)
         self.assertEqual(stale["services"]["gpu-smoke"]["state"], "unknown")
 
     def test_unsafe_switch_is_disabled_from_actual_gpu_state(self):
@@ -615,6 +630,19 @@ class WebTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("<meter ", response.text)
         self.assertEqual(response.text.count("용량 확인 불가"), 2)
+
+    def test_controller_timeout_retains_timestamped_metrics_without_controls(self):
+        self.data["collected_at"] = "2026-11-26T01:02:03+00:00"
+        self.data["metrics"] = {"ram_used_mib": 256, "ram_total_mib": 1024}
+        self.client.get("/", headers=self.headers)
+        with patch.object(web, "controller_request", side_effect=TimeoutError):
+            for _ in range(2):
+                web._cache_until = 0
+                html = self.client.get("/status", headers=self.headers).text
+                self.assertIn("<strong>25%</strong>", html)
+                self.assertIn("마지막 수집값", html)
+                self.assertIn(self.data["collected_at"], html)
+                self.assertNotIn("hx-post=", html)
 
     def test_large_body_and_forged_confirmation_rejected(self):
         headers = self.csrf_headers()

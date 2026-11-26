@@ -69,7 +69,9 @@ async def snapshot():
             data = response["data"]
             data["connected"] = True
         except (OSError, ValueError, KeyError, TimeoutError):
-            data = {"connected": False, "operation": None, "metrics": {}, "services": {
+            previous = _cache or {}
+            data = {"connected": False, "stale": True, "operation": None,
+                    "metrics": previous.get("metrics", {}), "collected_at": previous.get("collected_at"), "services": {
                 key: {"state": "unknown", "reason": "서버와 연결되지 않았습니다. 운영자에게 문의하세요.", "can_stop": False}
                 for key in SETTINGS["services"]
             }}

@@ -91,12 +91,19 @@ class Controller:
     def refresh(self):
         # Slow host commands run in a sampler, never in a web/Unix-socket request.
         states = {}
+        group_states = {}
         for key, service in self.portal["services"].items():
+            spec = portal_spec(service, self.policy)
+            targets = tuple(spec["targets"])
+            if targets in group_states:
+                states[key] = group_states[targets]
+                continue
             try:
                 states[key] = container_state(gpu.run, gpu.DOCKER, self.project,
-                                              portal_spec(service, self.policy), gpu.container_ids)
+                                              spec, gpu.container_ids)
             except Exception:
                 states[key] = {"state": "unknown", "reason": "서비스 상태를 확인할 수 없습니다.", "can_stop": False}
+            group_states[targets] = states[key]
         try:
             active_gpu = [name for name, value in self.policy["services"].items()
                           if gpu.active_containers(self.project, portal_spec({"gpu_service": name}, self.policy)["targets"])]
@@ -159,7 +166,7 @@ class Controller:
             snapshot = dict(self.cache) if fresh else {
                 "services": {key: {"state": "unknown", "reason": "호스트 상태를 확인할 수 없습니다.", "can_stop": False}
                              for key in self.portal["services"]},
-                "metrics": {"gpu": None, "cpu_percent": None, "ram_used_mib": None, "ram_total_mib": None},
+                "metrics": (self.cache or {}).get("metrics", {}),
                 "collected_at": (self.cache or {}).get("collected_at"),
             }
             snapshot["stale"] = not fresh
@@ -175,8 +182,11 @@ class Controller:
                 phase = "stopping" if stopping else "starting"
                 if not stopping and portal_spec(self.portal["services"][key], self.policy)["mode"] == "job" and states[key]["state"] == "busy":
                     phase = "busy"
-                states[key].update(state=phase, can_stop=False,
-                                   reason="일회성 작업이 실행 중입니다. 완료될 때까지 기다려 주세요." if phase == "busy" else "요청을 처리하고 있습니다. 잠시 기다려 주세요.")
+                group = self.portal["services"][key].get("gpu_service")
+                for card, state in states.items():
+                    if card == key or (group and self.portal["services"][card].get("gpu_service") == group):
+                        state.update(state=phase, can_stop=False,
+                                     reason="일회성 작업이 실행 중입니다. 완료될 때까지 기다려 주세요." if phase == "busy" else "요청을 처리하고 있습니다. 잠시 기다려 주세요.")
             for key, state in states.items():
                 reason = self.start_block_reason(key, states, snapshot.get("active_gpu"))
                 state["start_reason"] = reason
