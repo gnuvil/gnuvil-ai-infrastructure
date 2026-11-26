@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 import hmac
 import json
+import math
 import os
 from pathlib import Path
 import secrets
@@ -117,6 +118,13 @@ class SecurityMiddleware:
 app.add_middleware(SecurityMiddleware)
 
 
+def usage_percent(used, total=100):
+    if (type(used) in (int, float) and type(total) in (int, float)
+            and math.isfinite(total) and total > 0 and 0 <= used <= total):
+        return used / total * 100
+    return None
+
+
 def render(request, template, data, *, message=None):
     csrf = request.cookies.get(COOKIE) or secrets.token_urlsafe(32)
     collected_at = data.get("collected_at")
@@ -134,8 +142,16 @@ def render(request, template, data, *, message=None):
         state = data["services"].get(key, {"state": "unknown", "reason": "상태를 확인할 수 없습니다.", "can_stop": False})
         services.append({**definition, **state, "id": key,
                          "needs_confirm": "gpu_service" in definition and (active_gpu is None or any(other != definition["gpu_service"] for other in active_gpu))})
+    metrics = data["metrics"]
+    gpu = metrics.get("gpu") or {}
+    usage = {
+        "gpu": usage_percent(gpu.get("utilization")),
+        "vram": usage_percent(gpu.get("memory_used"), gpu.get("memory_total")),
+        "ram": usage_percent(metrics.get("ram_used_mib"), metrics.get("ram_total_mib")),
+    }
     response = templates.TemplateResponse(request=request, name=template, context={
-        "settings": SETTINGS, "services": services, "data": data, "states": STATES, "csrf": csrf, "message": message, "collected_time": collected_time,
+        "settings": SETTINGS, "services": services, "data": data, "states": STATES, "csrf": csrf, "message": message,
+        "collected_time": collected_time, "usage": usage,
     })
     response.set_cookie(COOKIE, csrf, httponly=True, secure=SETTINGS["public_origin"].startswith("https:"),
                         samesite="strict", path="/")
