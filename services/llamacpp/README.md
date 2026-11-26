@@ -47,6 +47,8 @@ curl --fail http://127.0.0.1:8081/v1/models
 
 로그에서 CUDA 장치, GPU 오프로딩 계층, 응답과 VRAM 사용량을 확인한다. 라우터의 `/health`는 라우터 준비 상태이며 개별 모델의 로딩이나 추론 성공을 보장하지 않는다. 모델 로딩 실패 또는 언로드 지연 시 로그와 `nvidia-smi`를 확인한다.
 
-API는 인증 없이 VM의 `127.0.0.1:8081`에만 노출된다. 원격 접속은 신뢰할 수 있는 사용자가 `ssh -L 8081:127.0.0.1:8081 <vm-계정>@<vm-주소>`로 터널을 사용한다. 포털은 상태 및 시작 제어만 제공하며 안전한 drain 어댑터가 없어 웹 종료·전환은 제한된다. 작업이 끝나면 운영자가 `sudo make gpu-off CONFIRM=1`로 종료한다.
+API는 인증 없이 VM의 `127.0.0.1:8081`에만 노출된다. 원격 접속은 신뢰할 수 있는 사용자가 `ssh -L 8081:127.0.0.1:8081 <vm-계정>@<vm-주소>`로 터널을 사용한다.
+
+Gnuvil AI Lab 포털에서 llama.cpp를 시작·종료하고 다른 GPU 서비스로 전환할 수 있다. 종료 요청 시 서비스가 새 작업을 잠시 차단하고 전달 중인 API 요청, 모델 로딩, 각 모델의 실행·대기 작업을 확인한다. 작업이 있거나 상태를 확인할 수 없으면 요청 접수를 재개하고 전환을 취소한다. 호스트 Controller는 `/run/gnuvil-llamacpp/lifecycle.sock`을 사용한다. 이 디렉터리는 `portal` Ansible 역할에서 준비한다.
 
 [고정 소스의 라우터와 API 문서](https://github.com/ggml-org/llama.cpp/blob/d12cc3d1ca6bba741cd77887ac9c9ee18c8415c7/tools/server/README.md)

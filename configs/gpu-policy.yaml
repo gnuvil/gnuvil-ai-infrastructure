@@ -8,6 +8,7 @@ services:
   llamacpp:
     mode: service
     ready_url: http://127.0.0.1:8081/health
+    probe_socket: /run/gnuvil-llamacpp/lifecycle.sock
 stop_timeout_seconds: 30
 idle_timeout_seconds: 30
 job_timeout_seconds: 60

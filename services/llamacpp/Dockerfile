@@ -15,7 +15,10 @@ RUN cmake -S /opt/llama.cpp -B /opt/llama.cpp/build \
     -DGGML_FMA=OFF -DGGML_F16C=ON -DGGML_BMI2=OFF \
     -DGGML_CPU_ALL_VARIANTS=OFF -DLLAMA_CURL=OFF -DLLAMA_BUILD_WEBUI=OFF -DLLAMA_BUILD_UI=OFF \
     && cmake --build /opt/llama.cpp/build --config Release --target llama-server -j 4
+RUN apt-get update && apt-get install -y --no-install-recommends python3-aiohttp \
+    && rm -rf /var/lib/apt/lists/*
 ENV LD_LIBRARY_PATH=/opt/llama.cpp/build/bin
+COPY lifecycle.py /opt/gnuvil-llamacpp/lifecycle.py
 USER 65534:65534
 EXPOSE 8080
-ENTRYPOINT ["/opt/llama.cpp/build/bin/llama-server"]
+ENTRYPOINT ["/usr/bin/python3", "/opt/gnuvil-llamacpp/lifecycle.py"]

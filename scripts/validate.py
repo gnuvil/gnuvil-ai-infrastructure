@@ -26,7 +26,7 @@ for folder in ("configs", "services", "ansible"):
 for path in sorted(yaml_paths):
     with path.open() as stream:
         list(yaml.load_all(stream, Loader=UniqueKeyLoader))
-python_paths = [path for folder in ("scripts", "services/portal", "services/comfyui/gnuvil_lifecycle", "tests")
+python_paths = [path for folder in ("scripts", "services/portal", "services/comfyui/gnuvil_lifecycle", "services/llamacpp", "tests")
                 for path in (root / folder).glob("*.py")]
 for path in sorted(python_paths):
     ast.parse(path.read_text(), filename=str(path))

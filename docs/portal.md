@@ -2,7 +2,7 @@
 
 동아리원이 브라우저에서 서비스를 시작하고 기존 AI 웹 화면에 접속하는 공통 진입점이다. 자체 회원가입, 사용자 DB, 관리자 웹 화면은 없다. 개별 AI 서비스의 인증과 사용자 데이터 격리는 별도다.
 
-초기 구현 이후 실제 VM을 조사해 기존 ComfyUI 구성·모델 매니페스트를 보존했다. 현재 포털에는 `gpu-smoke`와 ComfyUI를 표시한다. ComfyUI는 Health Check 또는 `ready_url`로 준비 상태를 확인하고, 전용 Unix 소켓으로 실행·대기 작업과 안전한 종료 가능 여부를 확인한다.
+포털에는 `gpu-smoke`, ComfyUI, llama.cpp를 표시한다. ComfyUI와 llama.cpp는 Health Check 또는 `ready_url`로 준비 상태를 확인하고, 전용 Unix 소켓으로 작업 상태와 안전한 종료 가능 여부를 확인한다.
 
 실제 VM의 LAN 공용 암호·TLS 배포는 [배포 기록](portal-deployment.md)을 따른다. `portal_lan_enabled=true`, `portal_lan_address`로 선택적으로 활성화한다.
 

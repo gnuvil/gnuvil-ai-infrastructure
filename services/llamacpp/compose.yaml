@@ -2,17 +2,22 @@
 services:
   llamacpp:
     platform: linux/amd64
-    image: gnuvil-ai/llamacpp:d12cc3d-cu129-router1
+    image: gnuvil-ai/llamacpp:d12cc3d-cu129-router2
     build:
       context: .
     profiles: [llamacpp]
     gpus: all
     environment:
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
-    command: ["--models-dir", "/models", "--models-preset", "/etc/llamacpp/models.ini", "--models-max", "1", "--host", "0.0.0.0", "--port", "8080"]
+    command: ["--models-dir", "/models", "--models-preset", "/etc/llamacpp/models.ini", "--models-max", "1"]
     ports:
       - "127.0.0.1:8081:8080"
     volumes:
+      - type: bind
+        source: /run/gnuvil-llamacpp
+        target: /run/gnuvil-llamacpp
+        bind:
+          create_host_path: false
       - type: bind
         source: /srv/ai-data/models/llamacpp
         target: /models
