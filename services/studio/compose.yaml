@@ -1,0 +1,49 @@
+---
+services:
+  studio:
+    platform: linux/amd64
+    image: gnuvil-ai/studio:96301e2
+    build:
+      context: .
+    # Companion of the comfyui GPU group (configs/gpu-policy.yaml): started and stopped with ComfyUI.
+    profiles: [comfyui]
+    user: "1000:1000"
+    environment:
+      # Same Compose project, so the ComfyUI container is reachable by service name when it runs.
+      COMFYUI_HOST: comfyui
+      COMFYUI_PORT: "8188"
+      WORKFLOWS_DIR: /app/workflows
+      FRONTEND_DIST: /app/frontend/dist
+      OUTPUTS_DIR: /data/outputs
+      UPLOADS_DIR: /data/state/uploads
+      DATABASE_PATH: /data/state/app.db
+      TAGS_CSV: /data/state/danbooru_tags.csv
+      LORAS_DIR: /models/loras
+      COMFYUI_OUTPUT_DIR: /comfyui-output
+      # UI and API share one origin; only needed for a separately hosted dev frontend.
+      CORS_ORIGINS: ""
+      # 0 = keep models in VRAM: ComfyUI owns the GPU while it runs, and reloading from disk is slow on this VM
+      LOCAL_AI_IDLE_FREE_SECONDS: "0"
+    ports:
+      - "127.0.0.1:8190:8000"
+      - "192.168.50.14:8190:8000"
+    volumes:
+      - /srv/ai-data/state/studio:/data/state
+      - /srv/ai-data/outputs/studio:/data/outputs
+      # LoRA metadata (read-only); ComfyUI outputs are writable so the gallery can delete them
+      - /srv/ai-data/models/comfyui/loras:/models/loras:ro
+      - /srv/ai-data/outputs/comfyui:/comfyui-output
+    pull_policy: never
+    restart: "no"
+    read_only: true
+    tmpfs: ["/tmp:size=256m,nosuid,nodev"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 128
+    mem_limit: 2g
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 20s

@@ -37,10 +37,24 @@ dependencies = [
   "pydantic-settings~=2.0",
   "PyOpenGL>=3.1.8",
   "comfy-angle",
+  # Custom nodes for the Local Image AI Studio (see Dockerfile for pinned commits)
+  "gguf>=0.13.0",
+  "protobuf",
+  "opencv-python-headless",
+  "scikit-image",
+  "matplotlib",
+  "piexif",
+  "dill",
+  "segment-anything",
+  "ultralytics>=8.3.162",
+  # ultralytics pulls polars; its default runtime needs AVX2, which Ivy Bridge lacks.
+  "polars-runtime-compat",
 ]
 
 [tool.uv]
 environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+# Drop the AVX2 polars runtime; polars-runtime-compat (listed above) runs on AVX-only CPUs.
+override-dependencies = ["polars-runtime-32 ; sys_platform == 'never'"]
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu126" }

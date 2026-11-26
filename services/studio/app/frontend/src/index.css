@@ -1,0 +1,306 @@
+@import "tailwindcss";
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+
+/* Cool "ink" greys replace Tailwind's neutral scale, so every existing neutral-* class picks up the new look. */
+@theme {
+  --font-sans: "Pretendard Variable", Pretendard, system-ui, "Segoe UI", sans-serif;
+  --color-neutral-50: #f6f7fb;
+  --color-neutral-100: #eceef6;
+  --color-neutral-200: #d6daea;
+  --color-neutral-300: #b6bcd2;
+  --color-neutral-400: #8d94ae;
+  --color-neutral-500: #6a718c;
+  --color-neutral-600: #4d536c;
+  --color-neutral-700: #363b51;
+  --color-neutral-800: #252939;
+  --color-neutral-900: #191c29;
+  --color-neutral-950: #0f111a;
+}
+
+:root {
+  color-scheme: dark;
+  --accent-from: #8b5cf6;
+  --accent-to: #d946ef;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  background-color: #0b0d14;
+  color: var(--color-neutral-100);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Form controls: one consistent look and an accent focus ring */
+input, select, textarea {
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--color-violet-500);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-violet-500) 25%, transparent);
+}
+input[type="range"], input[type="checkbox"], input[type="radio"] {
+  accent-color: var(--color-violet-500);
+}
+select {
+  cursor: pointer;
+}
+button {
+  cursor: pointer;
+  transition: color 0.15s, background-color 0.15s, border-color 0.15s, opacity 0.15s, transform 0.1s;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* Thin scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-neutral-700) transparent;
+}
+
+@layer components {
+  .field {
+    width: 100%;
+    background-color: var(--color-neutral-950);
+    border: 1px solid var(--color-neutral-800);
+    border-radius: 0.5rem;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.875rem;
+  }
+  .field-sm {
+    font-size: 0.75rem;
+  }
+  .card {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--color-neutral-900) 90%, transparent), color-mix(in srgb, var(--color-neutral-900) 60%, transparent));
+    border: 1px solid var(--color-neutral-800);
+    border-radius: 0.875rem;
+    padding: 0.875rem;
+  }
+  .section-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-neutral-400);
+    margin-bottom: 0.6rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .section-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-neutral-400);
+    text-align: left;
+  }
+  .section-toggle:hover {
+    color: var(--color-neutral-200);
+  }
+  .btn-primary {
+    background-image: linear-gradient(135deg, var(--accent-from), var(--accent-to));
+    color: white;
+    font-weight: 600;
+    box-shadow: 0 6px 20px -8px color-mix(in srgb, var(--accent-to) 70%, transparent);
+  }
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
+  .btn-primary:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+  .btn-primary:disabled {
+    background-image: none;
+    background-color: var(--color-neutral-800);
+    color: var(--color-neutral-500);
+    box-shadow: none;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 9999px;
+    border: 1px solid var(--color-neutral-800);
+    background-color: var(--color-neutral-900);
+    color: var(--color-neutral-300);
+  }
+  .chip:hover {
+    border-color: var(--color-violet-500);
+    color: var(--color-neutral-50);
+    background-color: color-mix(in srgb, var(--color-violet-500) 12%, var(--color-neutral-900));
+  }
+  .accent-text {
+    background-image: linear-gradient(135deg, #c4b5fd, #f0abfc);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+
+/* ------------------------------------------------------------------ motion */
+@property --spin {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes reveal {
+  0% { opacity: 0; filter: blur(22px) saturate(1.6) brightness(1.2); transform: scale(1.03); }
+  60% { opacity: 1; }
+  100% { opacity: 1; filter: none; transform: none; }
+}
+@keyframes aurora {
+  0% { transform: translate(-12%, -8%) rotate(0deg) scale(1); }
+  50% { transform: translate(10%, 6%) rotate(120deg) scale(1.15); }
+  100% { transform: translate(-6%, 10%) rotate(240deg) scale(1); }
+}
+@keyframes sweep {
+  from { transform: translateX(-120%) skewX(-18deg); }
+  to { transform: translateX(220%) skewX(-18deg); }
+}
+@keyframes grain {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-3%, 2%); }
+  50% { transform: translate(2%, -3%); }
+  75% { transform: translate(-2%, -1%); }
+}
+@keyframes spin-border { to { --spin: 360deg; } }
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(var(--fx, 30px), var(--fy, -20px)) scale(1.08); }
+}
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 10px 40px -10px rgba(217, 70, 239, 0.45); }
+  50% { box-shadow: 0 10px 60px -6px rgba(139, 92, 246, 0.75); }
+}
+@keyframes stripes { to { background-position: 28px 0; } }
+@keyframes breathe { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+@layer components {
+  .anim-in { animation: fade-up 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .reveal { animation: reveal 1.1s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .breathe { animation: breathe 2.2s ease-in-out infinite; }
+
+  /* The "image is being painted" canvas shown while a job runs */
+  .gen-canvas {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.9rem;
+    background: #10121c;
+    isolation: isolate;
+  }
+  .gen-canvas::before {
+    content: "";
+    position: absolute;
+    inset: -40%;
+    background:
+      radial-gradient(35% 35% at 30% 30%, rgba(139, 92, 246, 0.55), transparent 70%),
+      radial-gradient(30% 30% at 70% 60%, rgba(217, 70, 239, 0.45), transparent 70%),
+      radial-gradient(28% 28% at 40% 80%, rgba(56, 189, 248, 0.35), transparent 70%);
+    filter: blur(28px);
+    animation: aurora 7s ease-in-out infinite alternate;
+    z-index: -2;
+  }
+  .gen-canvas::after {
+    content: "";
+    position: absolute;
+    inset: -20%;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.55'/></svg>");
+    mix-blend-mode: overlay;
+    opacity: var(--noise, 0.7);
+    animation: grain 0.6s steps(3) infinite;
+    z-index: -1;
+    transition: opacity 0.8s;
+  }
+  .gen-canvas .shine {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 40%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+    animation: sweep 2.4s ease-in-out infinite;
+  }
+
+  .progress-track {
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: var(--color-neutral-800);
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 9999px;
+    background-image:
+      repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0 8px, transparent 8px 14px),
+      linear-gradient(90deg, var(--accent-from), var(--accent-to));
+    background-size: 28px 100%, 100% 100%;
+    animation: stripes 0.9s linear infinite;
+    transition: width 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+
+  /* Glowing animated border around the composer while typing */
+  .composer {
+    position: relative;
+    border-radius: 1rem;
+    padding: 1px;
+    background: var(--color-neutral-800);
+  }
+  .composer:focus-within {
+    background: conic-gradient(from var(--spin), #8b5cf6, #d946ef, #38bdf8, #8b5cf6);
+    animation: spin-border 4s linear infinite;
+    box-shadow: 0 0 40px -12px rgba(217, 70, 239, 0.6);
+  }
+  .composer > .composer-inner {
+    border-radius: calc(1rem - 1px);
+    background: color-mix(in srgb, var(--color-neutral-900) 96%, black);
+  }
+
+  .btn-primary { position: relative; overflow: hidden; }
+  .btn-primary::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 45%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+    transform: translateX(-120%) skewX(-18deg);
+  }
+  .btn-primary:hover:not(:disabled)::after { animation: sweep 0.9s ease-out; }
+
+  .orb {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(60px);
+    opacity: 0.35;
+    animation: float 14s ease-in-out infinite;
+    pointer-events: none;
+  }
+  .logo-glow { animation: glow-pulse 3.2s ease-in-out infinite; }
+
+  .tile { animation: fade-up 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .tile img, .tile video { transition: transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1); }
+  .tile:hover img, .tile:hover video { transform: scale(1.06); }
+  .chip { transition: color 0.15s, background-color 0.15s, border-color 0.15s, transform 0.15s; }
+  .chip:hover { transform: translateY(-1px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

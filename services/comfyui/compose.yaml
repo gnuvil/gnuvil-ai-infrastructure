@@ -2,7 +2,7 @@
 services:
   comfyui:
     platform: linux/amd64
-    image: gnuvil-ai/comfyui:0d0e105-cu126
+    image: gnuvil-ai/comfyui:0d0e105-cu126-studio1
     build:
       context: .
     profiles: [comfyui]
@@ -22,6 +22,18 @@ services:
         bind:
           create_host_path: false
       - /srv/ai-data/models/comfyui/checkpoints:/opt/ComfyUI/models/checkpoints:ro
+      # Local Image AI Studio models (read-only; folders created by services/studio/setup-data.sh)
+      - /srv/ai-data/models/comfyui/loras:/opt/ComfyUI/models/loras:ro
+      - /srv/ai-data/models/comfyui/vae:/opt/ComfyUI/models/vae:ro
+      - /srv/ai-data/models/comfyui/controlnet:/opt/ComfyUI/models/controlnet:ro
+      - /srv/ai-data/models/comfyui/ipadapter:/opt/ComfyUI/models/ipadapter:ro
+      - /srv/ai-data/models/comfyui/clip_vision:/opt/ComfyUI/models/clip_vision:ro
+      - /srv/ai-data/models/comfyui/ultralytics:/opt/ComfyUI/models/ultralytics:ro
+      - /srv/ai-data/models/comfyui/diffusion_models:/opt/ComfyUI/models/diffusion_models:ro
+      - /srv/ai-data/models/comfyui/text_encoders:/opt/ComfyUI/models/text_encoders:ro
+      - /srv/ai-data/models/comfyui/frame_interpolation:/opt/ComfyUI/models/frame_interpolation:ro
+      # DWPose weights; comfyui_controlnet_aux downloads them here on first use
+      - /srv/ai-data/state/comfyui/controlnet_aux:/opt/ComfyUI/custom_nodes/comfyui_controlnet_aux/ckpts
       - /srv/ai-data/outputs/comfyui:/data/output
       - /srv/ai-data/state/comfyui/input:/data/input
       - /srv/ai-data/state/comfyui/user:/data/user

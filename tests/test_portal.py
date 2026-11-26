@@ -73,6 +73,14 @@ class ConfigTests(unittest.TestCase):
         validate_portal(self.portal, self.policy)
         self.assertEqual(portal_spec(self.portal["services"]["chat"], self.policy)["targets"], ["chat", "frontend"])
 
+    def test_cards_may_share_a_gpu_group_but_not_cpu_targets(self):
+        # comfyui and studio cards both control the comfyui group (studio is its companion)
+        self.assertEqual(portal_spec(self.portal["services"]["studio"], self.policy)["targets"], ["comfyui", "studio"])
+        validate_portal(self.portal, self.policy)
+        self.portal["services"]["cpu"] = {"name": "CPU", "description": "Test", "category": "cpu", "icon": "chip", "cpu_service": {"service": "studio"}}
+        with self.assertRaises(ValueError):
+            validate_portal(self.portal, self.policy)
+
     def test_cpu_cannot_control_gpu_or_portal(self):
         for name in ("gpu-smoke", "portal"):
             self.portal["services"]["cpu"] = {"name": "CPU", "description": "Test", "category": "cpu", "icon": "chip", "cpu_service": {"service": name}}

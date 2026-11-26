@@ -18,6 +18,13 @@ services:
     icon: image
     url: http://192.168.50.14:8188
     gpu_service: comfyui
+  studio:
+    name: Image AI Studio
+    description: 채팅형 이미지·영상 생성 · ComfyUI와 함께 켜지고 꺼집니다
+    category: 이미지 생성
+    icon: image
+    url: http://192.168.50.14:8190
+    gpu_service: comfyui
   llamacpp:
     name: llama.cpp
     description: GGUF 모델을 사용하는 로컬 언어 모델 API
