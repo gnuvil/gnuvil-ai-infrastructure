@@ -80,6 +80,14 @@ function isVideoUrl(url?: string | null): boolean {
   return !!url && /\.(mp4|webm|mkv)$/i.test(url)
 }
 
+/** Message id. crypto.randomUUID only exists on HTTPS/localhost, and the club server serves plain HTTP on the LAN. */
+let idCounter = 0
+function newId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  idCounter += 1
+  return `m${Date.now().toString(36)}${idCounter}${Math.random().toString(36).slice(2, 8)}`
+}
+
 /** Overall sampling progress of a running message, 0-100. */
 function genPercent(m: { progress?: { value: number; max: number; done?: number; total?: number } }): number {
   const p = m.progress
@@ -325,10 +333,10 @@ function App() {
   }, [videoHq])
 
   async function smoothVideo(generationId: number) {
-    const aiMsgId = crypto.randomUUID()
+    const aiMsgId = newId()
     setMessages((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), role: 'user', text: '🎞 이 영상을 부드럽게 (프레임 2배)' },
+      { id: newId(), role: 'user', text: '🎞 이 영상을 부드럽게 (프레임 2배)' },
       { id: aiMsgId, role: 'ai', status: 'queued', note: '🎞 프레임 보간(RIFE) 2배: 원본 영상은 그대로 두고 새 영상을 만듭니다.' },
     ])
     try {
@@ -566,7 +574,7 @@ function App() {
     }
 
     const userMsg: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: newId(),
       role: 'user',
       text: rawPrompt,
       sourceImageUrl: activeSource
@@ -582,7 +590,7 @@ function App() {
     if (!videoPlan && videoSource) videoPlan = { prompt: rawPrompt, sourceGenId: videoSource.generationId }
     const effLoras = [...selectedLoras, ...charLoraList.filter((l) => !selectedLoras.some((s) => s.name === l.name))]
     const activeMask = maskBlob
-    const aiMsgId = crypto.randomUUID()
+    const aiMsgId = newId()
     setMessages((prev) => [...prev, userMsg, { id: aiMsgId, role: 'ai', status: 'queued', note: agentNote || undefined, aspect: width / Math.max(1, height) }])
     setPrompt('')
     clearSource()
